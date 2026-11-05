@@ -5,6 +5,7 @@ set -euo pipefail
 
 ISO_DIR="${1:?usage: make_iso.sh <iso_dir> <output.iso>}"
 OUT_ISO="${2:?usage: make_iso.sh <iso_dir> <output.iso>}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 EFI_DIR="$ISO_DIR/EFI/BOOT"
 mkdir -p "$EFI_DIR"
@@ -27,7 +28,7 @@ if command -v xorriso >/dev/null 2>&1; then
     -volid "KIAN_OS" \
     -volset "KIAN OS" \
     -publisher "Kian OS Project" \
-    -preparer "Kian OS 0.1.0 Genesis" \
+    -preparer "Kian OS 0.2.0 Horizon" \
     -sysid "LINUX" \
     -boot-load-size 4 \
     -boot-info-table \

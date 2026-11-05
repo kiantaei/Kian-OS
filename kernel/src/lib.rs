@@ -26,8 +26,7 @@ pub mod net;
 pub mod security;
 pub mod console;
 pub mod panic;
-pub mod kianfs;
-
+pub mod fs;
 use core::panic::PanicInfo;
 
 // Boot banner - ASCII art "KIAN OS" printed at boot.
@@ -37,7 +36,7 @@ pub static BOOT_BANNER: &str = r"
  \ \ \/\ \  \ \ \_\ \ \  \ \  __ \  \ \ \_\ \  \ \ \_\ \  \ \___  \  \ \  __\ \ \  __ \
   \ \_____\  \ \_____\ \  \ \_\ \_\  \ \_____\  \ \_____\  \/\_____\  \ \_\    \ \_\ \
    \/_____/   \/_____\/_\_\/_\/_/     \/_____/   \/_____/   \/_____/   \/_/     \/_/
-                                                                               v0.1.0 "Genesis"
+                                                                               v0.2.0 "Horizon"
 ";
 
 #[no_mangle]

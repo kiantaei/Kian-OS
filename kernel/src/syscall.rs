@@ -1,10 +1,17 @@
 use crate::kprintln;
+use crate::process;
+use crate::vfs;
 
 pub const SYSCALL_WRITE: u64 = 1;
 pub const SYSCALL_EXIT: u64 = 2;
 pub const SYSCALL_GETPID: u64 = 3;
 pub const SYSCALL_TIME: u64 = 4;
 pub const SYSCALL_YIELD: u64 = 5;
+pub const SYSCALL_READ: u64 = 6;
+pub const SYSCALL_OPEN: u64 = 7;
+pub const SYSCALL_CLOSE: u64 = 8;
+pub const SYSCALL_STAT: u64 = 9;
+pub const SYSCALL_EXEC: u64 = 10;
 
 pub fn init() {
     kprintln!("[Kian] Syscall interface initialized (ring 3 -> ring 0 via syscall instruction)");
@@ -27,6 +34,26 @@ pub fn handle(syscall_num: u64, arg1: u64, arg2: u64, arg3: u64) -> u64 {
         }
         SYSCALL_YIELD => {
             crate::scheduler::schedule();
+            0
+        }
+        SYSCALL_READ => {
+            let _ = (arg1, arg2, arg3);
+            0
+        }
+        SYSCALL_OPEN => {
+            let _ = (arg1, arg2, arg3);
+            0
+        }
+        SYSCALL_CLOSE => {
+            let _ = arg1;
+            0
+        }
+        SYSCALL_STAT => {
+            let _ = (arg1, arg2, arg3);
+            0
+        }
+        SYSCALL_EXEC => {
+            let _ = (arg1, arg2, arg3);
             0
         }
         _ => {

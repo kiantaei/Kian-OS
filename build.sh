@@ -4,18 +4,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_JSON="$ROOT/kernel/target.json"
-TARGET_NAME="x86_64-kian"
-BUILD_DIR="$ROOT/target"
+KERNEL_DIR="$ROOT/kernel"
 ISO_DIR="$ROOT/iso"
-OUT_ISO="$ROOT/kian-os.iso"
+OUT_ISO="$ROOT/kian-os-0.2.0.iso"
 
-mkdir -p "$BUILD_DIR" "$ISO_DIR/boot"
+mkdir -p "$ISO_DIR/boot"
 
-echo "[Kian] Building kernel (target: $TARGET_JSON)..."
-cargo build --release -Zjson-target-spec --manifest-path "$ROOT/kernel/Cargo.toml" --target "$TARGET_JSON"
+echo "[Kian] Building kernel (target: x86_64-unknown-none)..."
+cargo +nightly build --release --manifest-path "$KERNEL_DIR/Cargo.toml"
 
-KERNEL_A="$BUILD_DIR/$TARGET_NAME/release/libkian_kernel.a"
+KERNEL_A="$ROOT/kernel/target/x86_64-unknown-none/release/libkian_kernel.a"
 
 echo "[Kian] Linking kernel ELF (higher-half)..."
 ld.lld \
@@ -35,3 +33,4 @@ echo "[Kian] Building ISO..."
 
 echo "[Kian] Done: $OUT_ISO"
 sha256sum "$OUT_ISO" > "$OUT_ISO.sha256"
+echo "[Kian] Checksum: $OUT_ISO.sha256"

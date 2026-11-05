@@ -1,5 +1,5 @@
 // Kian OS - userspace init (pid 1)
-// Compiled with x86_64-kian cross-gcc, linked against kian libc (planned milestone).
+// Compiled with x86_64-unknown-none target, linked against kian libc (planned milestone).
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -9,7 +9,7 @@
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
     printf("[Kian] init (pid 1) starting...\n");
-    printf("[Kian] Welcome to Kian OS 0.1.0 \"Genesis\"\n");
+    printf("[Kian] Welcome to Kian OS 0.2.0 \"Horizon\"\n");
 
     // Ignore SIGINT/SIGQUIT in init
     signal(SIGINT, SIG_IGN);

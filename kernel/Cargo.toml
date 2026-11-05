@@ -1,6 +1,6 @@
 [package]
 name = "kian-kernel"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -11,4 +11,9 @@ path = "src/lib.rs"
 opt-level = 2
 panic = "abort"
 
+[profile.dev]
+panic = "abort"
+
 [dependencies]
+spin = "0.9"
+x86_64 = "0.15"

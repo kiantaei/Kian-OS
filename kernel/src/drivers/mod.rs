@@ -15,10 +15,20 @@ pub mod rtc;
 pub mod hpet;
 pub mod pit;
 pub mod apic;
+pub mod rtl8139;
+pub mod virtio_net;
 
 pub fn init() {
     kprintln!("[Kian] Driver framework initialized");
     vga::init();
     keyboard::init();
-    crate::kprintln!("[Kian] Core drivers: VGA, PS/2 keyboard loaded");
+    ps2_mouse::init();
+    svga::init();
+    vmmouse::init();
+    e1000::init();
+    e1000e::init();
+    vmxnet3::init();
+    rtl8139::init();
+    virtio_net::init();
+    crate::kprintln!("[Kian] Core drivers: VGA, PS/2 keyboard+mouse loaded");
 }

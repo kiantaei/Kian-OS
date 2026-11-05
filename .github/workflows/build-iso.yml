@@ -34,10 +34,9 @@ jobs:
         with:
           components: rust-src, llvm-tools-preview
 
-      - name: Add custom target definition
+      - name: Add x86_64-unknown-none target
         run: |
-          cp kernel/target.json /root/.rustup/toolchains/$(ls /root/.rustup/toolchains | grep nightly)/lib/rustlib/src/rust/../targets/x86_64-kian.json 2>/dev/null || true
-          echo "Custom target provided at kernel/target.json (path-based)"
+          rustup target add x86_64-unknown-none --toolchain nightly
 
       - name: Build kernel + ISO
         run: |
@@ -45,16 +44,16 @@ jobs:
 
       - name: Test boot headless in QEMU (serial log)
         run: |
-          timeout 30 qemu-system-x86_64 -m 2G -smp 2 -cdrom kian-os.iso -boot d -serial stdio -display none -vga none > qemu-boot.log 2>&1 || true
+          timeout 30 qemu-system-x86_64 -m 2G -smp 2 -cdrom kian-os-0.2.0.iso -boot d -serial stdio -display none -vga none > qemu-boot.log 2>&1 || true
           echo "===== QEMU BOOT LOG ====="
           cat qemu-boot.log || true
 
       - name: Generate SHA256
-        run: sha256sum kian-os.iso > kian-os.iso.sha256
+        run: sha256sum kian-os-0.2.0.iso > kian-os-0.2.0.iso.sha256
 
       - name: Get version tag
         id: tag
-        run: echo "tag=0.1.0-genesis-${GITHUB_RUN_ID}" >> $GITHUB_OUTPUT
+        run: echo "tag=0.2.0-horizon-${GITHUB_RUN_ID}" >> $GITHUB_OUTPUT
 
       - name: Create or update release
         uses: softprops/action-gh-release@v1
@@ -62,21 +61,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: Kian OS 0.1.0 Genesis (build ${{ github.run_id }})
+          name: Kian OS 0.2.0 "Horizon" (build ${{ github.run_id }})
           body: |
-            Kian OS 0.1.0 "Genesis" — bootable hybrid BIOS+UEFI ISO.
+            Kian OS 0.2.0 "Horizon" — bootable hybrid BIOS+UEFI ISO.
             Default login: kian / kian (hashed).
             Time zone: Asia/Tehran (UTC+03:30, no DST).
             Build: ${{ github.run_id }}
           files: |
-            kian-os.iso
-            kian-os.iso.sha256
+            kian-os-0.2.0.iso
+            kian-os-0.2.0.iso.sha256
           draft: false
           prerelease: true
           generate_release_notes: false
 
       - name: Commit build artifacts back to repo
         run: |
-          git add kian-os.iso kian-os.iso.sha256 || true
-          git commit -m "chore: publish kian-os.iso build ${{ github.run_id }}" || true
+          git add kian-os-0.2.0.iso kian-os-0.2.0.iso.sha256 || true
+          git commit -m "chore: publish kian-os-0.2.0.iso build ${{ github.run_id }}" || true
           git push origin master || true
