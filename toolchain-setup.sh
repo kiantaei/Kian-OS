@@ -9,7 +9,8 @@ rustup default nightly
 rustup component add rust-src llvm-tools-preview
 
 echo "[Kian] Adding custom target x86_64-kian..."
-# Custom target is provided via kernel/target.json (path-based target)
+# Register custom target via kernel/target.json so `cargo build --target x86_64-kian` works.
+rustup target add --path "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/kernel/target.json" 2>/dev/null || true
 rustup target add x86_64-unknown-linux-gnu 2>/dev/null || true
 
 echo "[Kian] Installing host linkers (lld, ld)..."

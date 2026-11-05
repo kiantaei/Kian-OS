@@ -13,7 +13,7 @@ OUT_ISO="$ROOT/kian-os.iso"
 mkdir -p "$BUILD_DIR" "$ISO_DIR/boot"
 
 echo "[Kian] Building kernel (target: $TARGET_JSON)..."
-cargo build --release --manifest-path "$ROOT/kernel/Cargo.toml" --target "$TARGET_JSON"
+cargo build --release -Zjson-target-spec --manifest-path "$ROOT/kernel/Cargo.toml" --target "$TARGET_JSON"
 
 KERNEL_A="$BUILD_DIR/$TARGET_NAME/release/libkian_kernel.a"
 
