@@ -37,10 +37,10 @@ struct ScreenChar {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-struct ColorCode(u8);
+pub struct ColorCode(u8);
 
 impl ColorCode {
-    fn new(fg: Color, bg: Color) -> ColorCode {
+    pub fn new(fg: Color, bg: Color) -> ColorCode {
         ColorCode((fg as u8) | ((bg as u8) << 4))
     }
 }

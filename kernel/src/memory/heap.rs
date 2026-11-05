@@ -1,4 +1,4 @@
-use linked_list_allocator::Heap;
+use linked_list_allocator::{Heap, LockedHeap};
 use x86_64::{VirtAddr, PhysAddr};
 use x86_64::structures::paging::{Mapper, Page, Size4KiB, PageTableFlags, OffsetPageTable};
 use crate::memory::frame_allocator::GlobalFrameAllocator;
@@ -7,6 +7,9 @@ use spin::Mutex;
 
 const HEAP_START: usize = 0x_4444_4444_0000;
 const HEAP_SIZE: usize = 4 * 1024 * 1024;
+
+#[global_allocator]
+static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 pub static HEAP: Mutex<Heap> = Mutex::new(Heap::empty());
 

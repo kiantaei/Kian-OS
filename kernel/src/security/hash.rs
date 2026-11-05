@@ -1,4 +1,5 @@
 use crate::kprintln;
+use alloc::string::String;
 
 pub fn sha512_crypt(password: &str) -> String {
     // Placeholder: real implementation uses SHA-512 crypt or Argon2.

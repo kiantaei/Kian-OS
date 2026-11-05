@@ -33,4 +33,11 @@ SECTIONS
         *(.note.GNU-stack)
         *(.comment)
     }
+
+    /* Limine request section - bootloader scans this for requests */
+    .limine_requests : {
+        __limine_requests_start = .;
+        KEEP(*(.limine_requests))
+        __limine_requests_end = .;
+    }
 }

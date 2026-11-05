@@ -26,7 +26,7 @@ pub mod net;
 pub mod security;
 pub mod console;
 pub mod panic;
-pub mod fs;
+pub mod gui;
 use core::panic::PanicInfo;
 
 // Boot banner - ASCII art "KIAN OS" printed at boot.
@@ -57,6 +57,9 @@ pub extern "C" fn kernel_main() -> ! {
 
     // Drivers.
     drivers::init();
+
+    // GUI framebuffer (STEP 1).
+    gui::init();
 
     // VFS + filesystems.
     vfs::init();
@@ -90,11 +93,6 @@ macro_rules! kprint {
 macro_rules! kprintln {
     () => ($crate::kprint!("\n"));
     ($($arg:tt)*) => ($crate::kprint!("{}\n", format_args!($($arg)*)));
-}
-
-#[alloc_error_handler]
-fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
-    crate::panic::halt(&format!("allocation error: {:?}", layout));
 }
 
 #[panic_handler]
