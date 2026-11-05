@@ -1,0 +1,14 @@
+# Kian OS - initramfs file list (stub)
+# Contents are packed into iso/initramfs.tar.gz at build time.
+# Planned layout:
+# /sbin/init        -> userspace init (C++)
+# /bin/login        -> login manager (C++)
+# /bin/ksh          -> Kian shell (C++)
+# /bin/date         -> date/timedate tool (C++)
+# /bin/passwd       -> password tool (C++)
+# /bin/whoami       -> whoami (C++)
+# /bin/su           -> su (C++)
+# /bin/useradd      -> useradd (C++)
+# /bin/edit         -> text editor (C++)
+# /etc/passwd       -> accounts (planned)
+# /etc/timezone     -> Asia/Tehran

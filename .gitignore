@@ -1,0 +1,14 @@
+target/
+kian-os.iso
+kian-os.iso.sha256
+.idea/
+.vscode/
+*.o
+*.a
+*.elf
+*.iso
+*.img
+*~
+# OS artifacts
+limine/
+vendor/
