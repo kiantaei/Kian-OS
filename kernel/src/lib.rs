@@ -30,14 +30,14 @@ pub mod fs;
 use core::panic::PanicInfo;
 
 // Boot banner - ASCII art "KIAN OS" printed at boot.
-pub static BOOT_BANNER: &str = r"
+pub static BOOT_BANNER: &str = r#"
   ______     __   __     ______     __  __     __   __     ______     ______   ______
  /\  __ \   /\ \./\ \   /\  __ \   /\ \/\ \   /\ \/\ \   /\  ___\   /\  ___\ /\  __ \
  \ \ \/\ \  \ \ \_\ \ \  \ \  __ \  \ \ \_\ \  \ \ \_\ \  \ \___  \  \ \  __\ \ \  __ \
   \ \_____\  \ \_____\ \  \ \_\ \_\  \ \_____\  \ \_____\  \/\_____\  \ \_\    \ \_\ \
    \/_____/   \/_____\/_\_\/_\/_/     \/_____/   \/_____/   \/_____/   \/_/     \/_/
-                                                                               v0.2.0 "Horizon"
-";
+                                                                                v0.2.0 "Horizon"
+"#;
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
