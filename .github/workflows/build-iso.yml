@@ -40,20 +40,35 @@ jobs:
         run: |
           make iso
 
-      - name: Smoke test in QEMU
-        run: |
-          timeout 30 qemu-system-x86_64 -cdrom kian-os-0.2.0.iso -m 512 -display none -serial file:serial.log || true
-          echo "----- serial.log -----"
-          cat serial.log || true
+      - name: Install debug tools
+        run: sudo apt-get install -y socat imagemagick
 
-      - name: Upload ISO artifact
+      - name: QEMU boot test with screenshot
+        run: |
+          qemu-system-x86_64 -cdrom kian-os-0.2.0.iso -m 512 -vga std -display none -no-reboot \
+            -d int,cpu_reset,guest_errors -D qemu-debug.log \
+            -serial file:serial.log -monitor unix:/tmp/qemu.sock,server,nowait &
+          QPID=$!
+          sleep 12
+          echo "screendump /tmp/shot.ppm" | socat - unix-connect:/tmp/qemu.sock || true
+          sleep 1
+          convert /tmp/shot.ppm shot.png || true
+          kill $QPID || true
+          echo "----- serial.log -----"; cat serial.log || true
+          echo "----- qemu-debug.log (first 40 lines) -----"; head -40 qemu-debug.log || true
+          echo "----- qemu-debug.log (last 20 lines) -----"; tail -20 qemu-debug.log || true
+
+      - name: Upload debug files
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kian-os-iso
+          name: kian-debug
           path: |
+            shot.png
+            serial.log
+            qemu-debug.log
             kian-os-0.2.0.iso
             kian-os-0.2.0.iso.sha256
-            serial.log
 
       - name: Publish release
         if: github.ref == 'refs/heads/main'

@@ -1,8 +1,9 @@
 // Kian OS - Framebuffer driver (STEP 1)
 // Requests a framebuffer from Limine and provides basic drawing.
 
-use crate::kprintln;
+use crate::arch::x86_64::serial;
 use core::ptr;
+use alloc::format;
 
 /// Limine framebuffer request (16-byte ID + revision + response pointer).
 /// The ID must match Limine's framebuffer request GUID (see limine.h).
@@ -68,10 +69,13 @@ static mut FRAMEBUFFER_REQUEST_ENTRY: LimineFramebufferRequest = LimineFramebuff
     response: ptr::null_mut(),
 };
 
+#[used]
+#[unsafe(link_section = ".limine_requests")]
 static mut FB_RESPONSE_PTR: *mut *mut LimineFramebufferResponse = ptr::null_mut();
 
-pub fn init() {
-    kprintln!("[Kian GUI] Requesting framebuffer from Limine...");
+/// Request a framebuffer from Limine. Returns Some(Framebuffer) if one is available.
+pub fn init() -> Option<Framebuffer> {
+    serial::write_str("KIAN GUI: requesting framebuffer from Limine...\n");
 
     // Wire the request's response pointer to our storage.
     unsafe {
@@ -91,28 +95,35 @@ pub fn init() {
                 let pitch = fb.pitch as u32;
                 let bpp = fb.bpp as u32;
 
-                unsafe {
-                    FB = Some(Framebuffer {
-                        address: addr,
-                        width,
-                        height,
-                        pitch,
-                        bpp,
-                        available: true,
-                    });
-                }
+                let fb_desc = Framebuffer {
+                    address: addr,
+                    width,
+                    height,
+                    pitch,
+                    bpp,
+                    available: true,
+                };
 
-                kprintln!(
-                    "[Kian GUI] Framebuffer: {}x{} @ {:p}, pitch={}, bpp={}",
-                    width, height, addr, pitch, bpp
-                );
-                return;
+                unsafe { FB = Some(fb_desc.clone()); }
+
+                serial::write_str("KIAN GUI: framebuffer ");
+                serial::write_u32(width);
+                serial::write_str("x");
+                serial::write_u32(height);
+                serial::write_str(" pitch=");
+                serial::write_u32(pitch);
+                serial::write_str(" bpp=");
+                serial::write_u32(bpp);
+                serial::write_str("\n");
+
+                return Some(fb_desc);
             }
         }
         _ => {}
     }
 
-    kprintln!("[Kian GUI] No framebuffer from Limine; GUI disabled, staying in text mode.");
+    serial::write_str("KIAN GUI: no framebuffer from Limine\n");
+    None
 }
 
 pub fn framebuffer() -> Option<&'static Framebuffer> {
@@ -120,28 +131,51 @@ pub fn framebuffer() -> Option<&'static Framebuffer> {
 }
 
 /// Fill the entire screen with a 32-bit color (0xRRGGBB).
-pub fn fill_screen(color: u32) {
-    let fb = match framebuffer() {
-        Some(f) if f.available => f,
-        _ => return,
-    };
-
+pub fn fill_screen(fb: &Framebuffer, color: u32) {
     let bpp = fb.bpp;
     if bpp != 32 {
-        kprintln!("[Kian GUI] fill_screen: unsupported bpp={}, skipping", bpp);
+        serial::write_str("KIAN GUI: unsupported bpp\n");
         return;
     }
 
-    let bytes_per_px = 4usize;
     unsafe {
         for y in 0..fb.height {
             let row_offset = (y as usize) * (fb.pitch as usize);
-            let row_base = fb.address.add(row_offset) as *mut u8;
+            let row_base = fb.address as *mut u8;
             for x in 0..fb.width {
-                let px = row_base.add((x as usize) * bytes_per_px) as *mut u32;
+                let byte_offset = row_offset + (x as usize) * 4;
+                let px = row_base.add(byte_offset) as *mut u32;
                 *px = color;
             }
         }
     }
-    kprintln!("[Kian GUI] Screen filled with 0x{:08X}", color);
+}
+
+/// Draw a single pixel at (x, y) with 32-bit color.
+pub fn draw_pixel(fb: &Framebuffer, x: u32, y: u32, color: u32) {
+    if x >= fb.width || y >= fb.height {
+        return;
+    }
+    if fb.bpp != 32 {
+        return;
+    }
+    unsafe {
+        let byte_offset = (y as usize) * (fb.pitch as usize) + (x as usize) * 4;
+        let px = fb.address as *mut u8;
+        let px = px.add(byte_offset) as *mut u32;
+        *px = color;
+    }
+}
+
+impl Clone for Framebuffer {
+    fn clone(&self) -> Self {
+        Framebuffer {
+            address: self.address,
+            width: self.width,
+            height: self.height,
+            pitch: self.pitch,
+            bpp: self.bpp,
+            available: self.available,
+        }
+    }
 }

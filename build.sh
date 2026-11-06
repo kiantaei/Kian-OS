@@ -28,7 +28,6 @@ ld.lld \
   -T "$KERNEL_DIR/linker.ld" \
   -nostdlib -static \
   -z max-page-size=0x1000 \
-  --gc-sections \
   -u _start \
   --whole-archive "$KLIB" --no-whole-archive \
   -o "$ISO_DIR/boot/kian-kernel.elf"

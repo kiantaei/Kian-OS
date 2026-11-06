@@ -1,148 +1,149 @@
 use core::fmt;
-use core::ptr::{read_volatile, write_volatile};
-use spin::Once;
-use spin::Mutex;
+use crate::arch::x86_64::serial;
 
-const BUFFER_HEIGHT: usize = 25;
-const BUFFER_WIDTH: usize = 80;
-const VGA_ADDRESS: *mut Buffer = 0xb8000 as *mut _;
+const CONSOLE_WIDTH: usize = 80;
+const CONSOLE_HEIGHT: usize = 30;
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Color {
-    Black = 0,
-    Blue = 1,
-    Green = 2,
-    Cyan = 3,
-    Red = 4,
-    Magenta = 5,
-    Brown = 6,
-    LightGray = 7,
-    DarkGray = 8,
-    LightBlue = 9,
-    LightGreen = 10,
-    LightCyan = 11,
-    LightRed = 12,
-    Pink = 13,
-    Yellow = 14,
-    White = 15,
+static mut CURSOR_X: usize = 0;
+static mut CURSOR_Y: usize = 0;
+static mut CONSOLE_INIT: bool = false;
+
+// Text buffer in .bss for the scrolling console
+static mut CONSOLE_BUFFER: [[u8; CONSOLE_WIDTH]; CONSOLE_HEIGHT] = [[b' '; CONSOLE_WIDTH]; CONSOLE_HEIGHT];
+
+pub fn init() {
+    unsafe { CONSOLE_INIT = true; }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C)]
-pub struct ScreenChar {
-    pub ascii: u8,
-    pub color_code: ColorCode,
-}
+fn put_byte(byte: u8) {
+    // Always write to serial
+    serial::write_byte(byte);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(transparent)]
-pub struct ColorCode(u8);
-
-impl ColorCode {
-    pub fn new(fg: Color, bg: Color) -> ColorCode {
-        ColorCode((fg as u8) | ((bg as u8) << 4))
-    }
-}
-
-pub struct Buffer {
-    pub chars: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT],
-}
-
-pub struct Writer {
-    pub column: usize,
-    pub color_code: ColorCode,
-    pub buffer: &'static mut Buffer,
-}
-
-impl Writer {
-    pub fn new(buffer: &'static mut Buffer) -> Self {
-        Writer {
-            column: 0,
-            color_code: ColorCode::new(Color::LightGray, Color::Black),
-            buffer,
-        }
+    if !unsafe { CONSOLE_INIT } {
+        return;
     }
 
-    pub fn write_byte(&mut self, byte: u8) {
-        match byte {
-            b'\n' => self.new_line(),
-            byte => {
-                if self.column >= BUFFER_WIDTH {
-                    self.new_line();
-                }
-                let row = BUFFER_HEIGHT - 1;
-                let col = self.column;
-                let color = self.color_code;
-                unsafe {
-                    write_volatile(
-                        &mut self.buffer.chars[row][col] as *mut ScreenChar,
-                        ScreenChar { ascii: byte, color_code: color },
-                    );
-                }
-                self.column += 1;
-            }
-        }
-    }
-
-    fn new_line(&mut self) {
-        for row in 1..BUFFER_HEIGHT {
-            for col in 0..BUFFER_WIDTH {
-                let c = unsafe {
-                    read_volatile(&self.buffer.chars[row][col] as *const ScreenChar)
-                };
-                unsafe {
-                    write_volatile(
-                        &mut self.buffer.chars[row - 1][col] as *mut ScreenChar,
-                        c,
-                    );
-                }
-            }
-        }
-        self.clear_row(BUFFER_HEIGHT - 1);
-        self.column = 0;
-    }
-
-    fn clear_row(&mut self, row: usize) {
-        let blank = ScreenChar { ascii: b' ', color_code: self.color_code };
-        for col in 0..BUFFER_WIDTH {
+    match byte {
+        b'\n' => {
             unsafe {
-                write_volatile(
-                    &mut self.buffer.chars[row][col] as *mut ScreenChar,
-                    blank,
-                );
+                CURSOR_X = 0;
+                CURSOR_Y += 1;
+                if CURSOR_Y >= CONSOLE_HEIGHT {
+                    scroll_up();
+                    CURSOR_Y = CONSOLE_HEIGHT - 1;
+                }
+            }
+        }
+        b'\r' => {
+            unsafe { CURSOR_X = 0; }
+        }
+        byte => {
+            unsafe {
+                CONSOLE_BUFFER[CURSOR_Y][CURSOR_X] = byte;
+                CURSOR_X += 1;
+                if CURSOR_X >= CONSOLE_WIDTH {
+                    CURSOR_X = 0;
+                    CURSOR_Y += 1;
+                    if CURSOR_Y >= CONSOLE_HEIGHT {
+                        scroll_up();
+                        CURSOR_Y = CONSOLE_HEIGHT - 1;
+                    }
+                }
+            }
+            redraw();
+        }
+    }
+}
+
+fn scroll_up() {
+    unsafe {
+        for y in 0..CONSOLE_HEIGHT - 1 {
+            for x in 0..CONSOLE_WIDTH {
+                CONSOLE_BUFFER[y][x] = CONSOLE_BUFFER[y + 1][x];
+            }
+        }
+        for x in 0..CONSOLE_WIDTH {
+            CONSOLE_BUFFER[CONSOLE_HEIGHT - 1][x] = b' ';
+        }
+    }
+}
+
+fn redraw() {
+    let fb = match crate::gui::framebuffer::framebuffer() {
+        Some(f) => f,
+        None => return,
+    };
+
+    // Clear the whole screen to black first
+    unsafe {
+        let bytes_per_px = 4usize;
+        for y in 0..fb.height {
+            let row_base = fb.address.add((y as usize) * (fb.pitch as usize)) as *mut u8;
+            for x in 0..fb.width {
+                let px = row_base.add((x as usize) * bytes_per_px) as *mut u32;
+                *px = 0x001A2B4A; // dark blue
+            }
+        }
+    }
+
+    // Redraw all visible characters
+    for y in 0..CONSOLE_HEIGHT {
+        for x in 0..CONSOLE_WIDTH {
+            let byte = unsafe { CONSOLE_BUFFER[y][x] };
+            if byte != b' ' {
+                draw_char_at(&fb, x as u32 * 8, y as u32 * 8, byte, 0xFFFFFF);
             }
         }
     }
 }
+
+fn draw_char_at(fb: &crate::gui::framebuffer::Framebuffer, x: u32, y: u32, ch: u8, color: u32) {
+    let glyph = if ch >= 32 && ch <= 126 {
+        crate::font::FONT_8X8[(ch - 32) as usize]
+    } else {
+        crate::font::FONT_8X8[0] // space
+    };
+
+    for row in 0..8 {
+        let pixels = glyph[row];
+        for col in 0..8 {
+            if (pixels >> (7 - col)) & 1 == 1 {
+                let px_addr = (y + row) as usize * (fb.pitch as usize) + (x + col) as usize * 4;
+                let px = unsafe { fb.address.add(px_addr) as *mut u32 };
+                *px = color;
+            }
+        }
+    }
+}
+
+pub fn draw_text(x: u32, y: u32, text: &str, color: u32) {
+    let fb = match crate::gui::framebuffer::framebuffer() {
+        Some(f) => f,
+        None => return,
+    };
+
+    for (i, ch) in text.bytes().enumerate() {
+        draw_char_at(&fb, x + (i as u32) * 8, y, ch, color);
+    }
+}
+
+pub struct Writer;
 
 impl fmt::Write for Writer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        for b in s.bytes() {
-            self.write_byte(b);
+        for byte in s.bytes() {
+            put_byte(byte);
         }
         Ok(())
     }
 }
 
-static WRITER_INIT: Once = Once::new();
-static mut WRITER: Option<Mutex<Writer>> = None;
-
-pub fn writer() -> &'static Mutex<Writer> {
-    unsafe {
-        WRITER_INIT.call_once(|| {
-            WRITER = Some(Mutex::new(Writer::new(unsafe { &mut *VGA_ADDRESS })));
-        });
-        WRITER.as_mut().unwrap()
-    }
+pub fn writer() -> &'static Writer {
+    &Writer
 }
 
-pub fn early_init() {
-    let w = writer();
-    let mut writer = w.lock();
-    for row in 0..BUFFER_HEIGHT {
-        writer.clear_row(row);
+pub fn write_str(s: &str) {
+    for byte in s.bytes() {
+        put_byte(byte);
     }
-    writer.column = 0;
 }

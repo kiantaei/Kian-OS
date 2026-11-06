@@ -1,5 +1,4 @@
 use x86_64::instructions::port::Port;
-use crate::kprintln;
 
 const COM1_DATA: u16 = 0x3F8;
 const COM1_IER: u16 = 0x3F9;
@@ -20,7 +19,6 @@ pub fn init() {
     unsafe { lcr_port.write(0x03); }    // line control: 8N1, DLAB=0
     let mut ier_port = Port::<u8>::new(COM1_IER);
     unsafe { ier_port.write(0x00); }    // IER: no interrupts
-    crate::kprintln!("[Kian] Serial (COM1) initialized");
 }
 
 pub fn write_byte(b: u8) {
@@ -30,5 +28,30 @@ pub fn write_byte(b: u8) {
         while (port.read() & 0x20) == 0 {}
         let mut data_port = Port::<u8>::new(COM1_DATA);
         data_port.write(b);
+    }
+}
+
+pub fn write_str(s: &str) {
+    for b in s.bytes() {
+        write_byte(b);
+    }
+}
+
+pub fn write_u32(n: u32) {
+    if n == 0 {
+        write_byte(b'0');
+        return;
+    }
+    let mut digits = [0u8; 10];
+    let mut i = 0;
+    let mut n = n;
+    while n > 0 {
+        digits[i] = b'0' + (n % 10) as u8;
+        n /= 10;
+        i += 1;
+    }
+    while i > 0 {
+        i -= 1;
+        write_byte(digits[i]);
     }
 }
