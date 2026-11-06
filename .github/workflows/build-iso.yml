@@ -2,12 +2,11 @@ name: Build Kian OS ISO
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
   build:
@@ -41,39 +40,29 @@ jobs:
         run: |
           make iso
 
-      - name: Smoke test boot headless in QEMU
+      - name: Smoke test in QEMU
         run: |
           timeout 30 qemu-system-x86_64 -cdrom kian-os-0.2.0.iso -m 512 -display none -serial file:serial.log || true
+          echo "----- serial.log -----"
           cat serial.log || true
 
-      - name: Generate SHA256
-        run: sha256sum kian-os-0.2.0.iso > kian-os-0.2.0.iso.sha256
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kian-os-iso
+          path: |
+            kian-os-0.2.0.iso
+            kian-os-0.2.0.iso.sha256
+            serial.log
 
-      - name: Get version tag
-        id: tag
-        run: echo "tag=0.2.0-horizon-${GITHUB_RUN_ID}" >> $GITHUB_OUTPUT
-
-      - name: Create or update release
-        uses: softprops/action-gh-release@v1
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: Kian OS 0.2.0 "Horizon" (build ${{ github.run_id }})
-          body: |
-            Kian OS 0.2.0 "Horizon" — bootable hybrid BIOS+UEFI ISO.
-            Default login: kian / kian (hashed).
-            Time zone: Asia/Tehran (UTC+03:30, no DST).
-            Build: ${{ github.run_id }}
+          tag_name: v0.2.0-build-${{ github.run_number }}
+          name: Kian OS 0.2.0 build ${{ github.run_number }}
           files: |
             kian-os-0.2.0.iso
             kian-os-0.2.0.iso.sha256
-          draft: false
-          prerelease: true
-          generate_release_notes: false
-
-      - name: Commit build artifacts back to repo
-        run: |
-          git add kian-os-0.2.0.iso kian-os-0.2.0.iso.sha256 || true
-          git commit -m "chore: publish kian-os-0.2.0.iso build ${{ github.run_id }}" || true
-          git push origin master || true
