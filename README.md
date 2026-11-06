@@ -65,7 +65,7 @@ In VMware: boot the ISO, watch the serial console (COM1, 115200 8N1) or the scre
 | G5 desktop: wallpapers, desktop icons, 48px acrylic taskbar, start menu with search filter, quick settings, calendar flyout, toasts, task view, 2 virtual desktops | **Fully working** (task-view thumbnails are simplified previews, not real content) |
 | G6 login/lock screen: big clock, avatar, password box, shake on wrong password, Win+L / Ctrl+Alt+L | **Fully working** (GUI_REQUIRES_LOGIN=false: no double login) |
 | G7 apps: Terminal (**Kian Terminal** — caret editing, Up/Down history, **TAB completion** — `ls desk` + TAB → `ls Desktop/`, TAB TAB lists candidates, Ctrl+C → `^C`, pipes + redirection, nano, mini-python, neofetch), Files, Notepad, Calculator (fixed decimal entry), Settings, Task Manager, Paint, Run dialog | **Fully working**; RAM fs is volatile (stated in UI + README) |
-| G7.5 fonts: embedded proportional UI font (Liberation Sans 16px) + 8x16 mono terminal font, generated offline by `tools/gen_font.py` into `gui/font.cpp`; inline colored emoji set (`gui/emoji.cpp`, escape `\x01`+id) | **Fully working** (bitmap tables verified in host-rendered previews) |
+| G7.5 fonts: embedded proportional UI font (Liberation Sans 16px) + 8x16 mono terminal font, generated offline by `tools/gen_font.py` into `gui/font.cpp`; all icons are native code-drawn shapes (`gui/icons.cpp`) — **no emoji glyphs, no Unicode emoji, no Windows emoji** | **Fully working** (bitmap tables verified in host-rendered previews) |
 | G8 polish: Win+D, Win+Arrow snap, Ctrl+Alt+Del screen, tooltips, dirty-rect redraw, idle spin, **taskbar with real window buttons** (click = focus/minimize, right-click = Restore/Minimize/Maximize/Close) | **Fully working** |
 | G9 VMware absolute mouse (backdoor 0x5658) | **Not done** (PS/2 relative mouse + 2x accel) |
 | ksh `passwd` change | **Partly working** (stub) |
@@ -85,6 +85,11 @@ In VMware: boot the ISO, watch the serial console (COM1, 115200 8N1) or the scre
 | Paint | `paint` | `paint` |
 
 Registered in: Start menu tiles, taskbar pins, window buttons, Run dialog, Task View, desktop icons and the terminal command registry.
+
+### Keyboard behavior (honest contract)
+
+- **Case**: Shift and Caps Lock are decoded once in the kernel (`caps ^ shift`, CapsLock toggles once per physical press), so `c` types lowercase and Shift/Caps types `C` in every app.
+- **`Ctrl+C`**: context-dependent. Kian Terminal echoes `^C` and cancels the line (also aborts the python REPL); nano shows line/column (GNU nano behavior); apps **without** clipboard support (Notepad, Run dialog, Start search, dialogs, Xenox omnibox) ignore Ctrl+letter combos entirely — nothing is inserted. Kian OS does not claim clipboard support.
 
 ## Xenox Browser
 

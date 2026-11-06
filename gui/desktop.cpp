@@ -7,7 +7,6 @@
 #include "apps.h"
 #include "ramfs.h"
 #include "gui.h"
-#include "emoji.h"
 
 static const int TB_H = 48;
 static const int PIN_N = 6;
@@ -670,7 +669,6 @@ void start_menu_draw(Desktop *d) {
 
     // pinned grid (filtered)
     draw_text_bold(p.x + 12, p.y + 54, "Pinned", THEME->text, 2);
-    emoji_draw(EMOJI_STAR, p.x + 12 + text_width("Pinned", 2) + 6, p.y + 56, 14);
     const char *q = tbox_text(&d->sbox);
     int tw = (p.w - 24) / 6;
     int shown = 0;

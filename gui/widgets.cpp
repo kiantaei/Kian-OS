@@ -132,7 +132,9 @@ bool tbox_key(TBox *t, const kian_event_t *e) {
     if (a == KIAN_KEY_RIGHT) { if (t->caret < t->len) t->caret++; return false; }
     if (a == KIAN_KEY_HOME)  { t->caret = 0; return false; }
     if (a == KIAN_KEY_END)   { t->caret = t->len; return false; }
-    if (b >= 32 && b < 127 && t->len < 127) {
+    if (!(e->c & 2) && b >= 32 && b < 127 && t->len < 127) {
+        // plain printable only: Ctrl+letter (e.g. Ctrl+C) must never type a
+        // character - this box has no clipboard/selection support
         for (int i = t->len; i > t->caret; i--) t->buf[i] = t->buf[i - 1];
         t->buf[t->caret++] = (char)b;
         t->len++;

@@ -9,7 +9,6 @@
 #include "../gui.h"
 #include "../ramfs.h"
 #include "../theme.h"
-#include "../emoji.h"
 #include "../util.h"
 
 // ---------------- output helpers ----------------

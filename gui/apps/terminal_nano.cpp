@@ -240,7 +240,7 @@ int nano_key(void *h, const kian_event_t *e) {
             return 0;
         }
         if (a == KIAN_KEY_BACKSPACE || ch == 8) { if (n->prompt_len > 0) n->prompt[--n->prompt_len] = '\0'; return 0; }
-        if (ch >= 32 && ch < 127 && n->prompt_len < 62) { n->prompt[n->prompt_len++] = ch; n->prompt[n->prompt_len] = '\0'; }
+        if (!ctrl && ch >= 32 && ch < 127 && n->prompt_len < 62) { n->prompt[n->prompt_len++] = ch; n->prompt[n->prompt_len] = '\0'; }
         return 0;
     }
 

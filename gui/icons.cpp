@@ -339,6 +339,47 @@ static void draw_download(int x, int y, int s, uint32_t c) {
     hline(x + 2, y + s - 2, s - 4, c);
 }
 
+// native globe (browser start page): circle ring + meridian ellipse + equator
+static void draw_globe(int x, int y, int s, uint32_t c) {
+    int cx = x + s / 2, cy = y + s / 2;
+    int r = s / 2 - 1;
+    if (r < 3) r = 3;
+    for (int dy = -r; dy <= r; dy++) {
+        for (int dx = -r; dx <= r; dx++) {
+            int dd = dx * dx + dy * dy;
+            if (dd <= r * r && dd >= (r - 1) * (r - 1)) gp(cx + dx, cy + dy, c); // ring only
+        }
+    }
+    // vertical meridian (ellipse ring): ry = r, rx = r/2, dx = rx*sqrt(1-(dy/r)^2)
+    int rx = (r > 4) ? r / 2 : 2;
+    for (int dy = -r; dy <= r; dy++) {
+        int want = 0;   // largest want with want^2 * r^2 <= rx^2 * (r^2 - dy^2)
+        while ((want + 1) * (want + 1) * (int64_t)r * r <=
+               (int64_t)rx * rx * (r * r - dy * dy)) want++;
+        gp(cx + want, cy + dy, c);
+        gp(cx - want, cy + dy, c);
+    }
+    hline(cx - r, cy, r * 2 + 1, c);   // full equator
+}
+
+// native warning triangle (browser error page): outline + exclamation mark
+static void draw_warn(int x, int y, int s, uint32_t c) {
+    int cx = x + s / 2;
+    int top = y + 1, bot = y + s - 2, half = s / 2 - 1;
+    if (half < 2) half = 2;
+    for (int i = 0; i <= half; i++) {
+        // apex at the top (cx, top), base at the bottom (cx +/- half, bot)
+        int ly = top + (i * (bot - top)) / half;
+        gp(cx - i, ly, c);
+        gp(cx + i, ly, c);
+    }
+    hline(cx - half, bot, half * 2 + 1, c);
+    // exclamation mark
+    int w = (s >= 16) ? 2 : 1;
+    fill_rect(cx - w / 2, y + s * 2 / 5, w, s / 4, c);
+    fill_rect(cx - w / 2, bot - s / 5, w, w, c);
+}
+
 void icon_draw(int id, int x, int y, int size, uint32_t color) {
     if (size <= 0) return;
     switch (id) {
@@ -381,6 +422,8 @@ void icon_draw(int id, int x, int y, int size, uint32_t color) {
     case IC_CLOCK:    draw_clock(x, y, size, color); break;
     case IC_DOWNLOAD: draw_download(x, y, size, color); break;
     case IC_HISTORY:  draw_clock(x, y, size, color); break;
+    case IC_GLOBE:    draw_globe(x, y, size, color); break;
+    case IC_WARN:     draw_warn(x, y, size, color); break;
     default: break;
     }
 }

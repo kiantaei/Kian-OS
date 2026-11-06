@@ -498,7 +498,7 @@ extern "C" int gui_main(const kian_fb_t *fb) {
     }
     slog("GUI: step G6 ok (login path)\n");
 
-    toast_show(&sh->desk, "Welcome, kian! \x01\x22");   // heart emoji inline
+    toast_show(&sh->desk, "Welcome, kian!");
     sh->running = true;
     sh->need_full = true;
     sh->taskbar_dirty = false;

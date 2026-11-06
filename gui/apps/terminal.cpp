@@ -10,9 +10,9 @@
 #include "../ramfs.h"
 #include "../input.h"
 #include "../widgets.h"
+#include "../icons.h"
 #include "../util.h"
 #include "../theme.h"
-#include "../emoji.h"
 
 static bool g_term_milestone = false;
 
@@ -500,7 +500,7 @@ static void term_new_tab(TermApp *a) {
     }
     TermTab *nt = &a->tab[a->ntabs++];
     tab_reset(nt);
-    term_print(nt, "Kian Terminal \x01\x21  new tab\n", TC_DIM);
+    term_print(nt, "Kian Terminal - new tab\n", TC_DIM);
     a->active = a->ntabs - 1;
 }
 
@@ -807,7 +807,7 @@ void term_event(void *inst, const kian_event_t *e, Rect r) {
             return;
         }
         if (ch == '\n') { py_submit(a, t); return; }
-        if (ch >= 32 && ch < 127) {
+        if (ch >= 32 && ch < 127 && !ctrl) {
             char one[2] = { ch, '\0' };
             pyline_insert(t, one, 1);
         }
@@ -840,7 +840,7 @@ void term_event(void *inst, const kian_event_t *e, Rect r) {
     }
     if (akey == KIAN_KEY_DEL) { line_remove_at(t, t->ed.lcaret); return; }
     if (ch == '\n') { term_exec(a, t); return; }
-    if (ch >= 32 && ch < 127) {
+    if (ch >= 32 && ch < 127 && !ctrl) {
         char one[2] = { ch, '\0' };
         line_insert(t, one, 1);
     }
@@ -856,7 +856,7 @@ void *term_create() {
     a->last_tab_len = 0;
     for (int i = 0; i < TERM_MAX_TABS; i++) tab_reset(&a->tab[i]);
     TermTab *t = &a->tab[0];
-    term_print(t, "Kian Terminal \x01\x21", TC_ACCENT);
+    term_print(t, "Kian Terminal", TC_ACCENT);
     term_print(t, "\n", TC_FG);
     term_print(t, "commands: help neofetch ls cd cat echo nano python g++ ... (TAB completes)\n", TC_DIM);
     term_print(t, "TAB completes commands and paths - TAB TAB lists candidates.\n", TC_DIM);

@@ -584,6 +584,10 @@ static bool parse_simple_stmt(PyInterp *pi, const char *line, int *out) {
 
 // ---------------- evaluator ----------------
 
+// exec one statement node (block heads handled here too)
+static bool exec_stmt(PyInterp *pi, int idx, VVal *out);
+static bool register_def(PyInterp *pi, PNode *n);   // defined below exec_stmt
+
 static PyScope *cur_scope(PyInterp *pi) { return &pi->sc[pi->depth]; }
 
 static VVal *scope_find(PyScope *s, const char *name) {
@@ -900,8 +904,6 @@ static bool eval_node(PyInterp *pi, int idx, VVal *out) {
 }
 
 // exec one statement node (block heads handled here too)
-static bool exec_stmt(PyInterp *pi, int idx, VVal *out);
-
 static bool exec_block(PyInterp *pi, int chain) {
     int r = chain;
     while (r >= 0 && !pi->brk && !pi->cont && !pi->ret && !pi->err && pi->steps < 200000 && !pi->exitreq) {

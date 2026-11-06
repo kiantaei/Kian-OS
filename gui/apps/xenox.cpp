@@ -10,7 +10,6 @@
 #include "../util.h"
 #include "../ramfs.h"
 #include "../theme.h"
-#include "../emoji.h"
 
 static const int TB_H = 34;       // toolbar height
 static const int TAB_H = 30;      // tab strip height
@@ -20,7 +19,7 @@ static const int STACK_N = 8;     // per-tab back/fwd entries
 static const int HIST_N = 16;     // history ring
 static const int BM_N = 8;        // bookmark pool
 static const int SUG_N = 5;       // omnibox suggestions
-static const char *BOOKMARK_FILE = "/Documents/xenox-bookmarks.txt";
+// bookmarks persist to /Documents/xenox-bookmarks.txt (see bookmarks_save)
 
 struct XBookmark { char title[64]; char url[XENOX_URL_MAX]; };
 
@@ -172,6 +171,7 @@ static void page_for_url(const char *url, int *page, const char **title) {
 }
 
 static void apply_url(XenoxApp *b, XTab *t, const char *url) {
+    (void)b;   // reserved for future per-app url handling
     int page = XP_START;
     const char *title = "New Tab";
     page_for_url(url, &page, &title);
@@ -250,8 +250,6 @@ static int lay_widths(Rect r, int *omni_w) {
 }
 
 static void layout(XenoxApp *b, Rect r) {
-    b->last_w = r.w;
-    b->last_h = r.h;
     int maxtabs = b->ntabs;
     if (6 + b->ntabs * (TAB_W + 4) + 30 > r.w) maxtabs = (r.w - 36) / (TAB_W + 4);
     if (maxtabs < 1) maxtabs = 1;
@@ -340,7 +338,7 @@ static void draw_page(XenoxApp *b, Rect r) {
 
     if (t->page == XP_START) {
         draw_centered_x("Xenox Browser", cr, 60, THEME->text, 2, true);
-        emoji_draw(EMOJI_GLOBE, cr.x + cr.w / 2 - 9, cr.y + 96, 18);
+        icon_draw(IC_GLOBE, cr.x + cr.w / 2 - 9, cr.y + 96, 18, THEME->accent);
         draw_centered_x("Internet access is not available yet.", cr, 122, THEME->text_dim, 1, false);
         draw_centered_x("Kian OS networking support is under development.", cr, 140, THEME->text_dim, 1, false);
         draw_centered_x("Only the built-in xenox:// pages render. No websites are faked.", cr, 158, THEME->text_dim, 1, false);
@@ -444,10 +442,10 @@ static void draw_page(XenoxApp *b, Rect r) {
         for (int i = 0; i < 6; i++) {
             draw_text(cr.x + 40, ty + i * 20, lines[i], (i == 2) ? THEME->text : THEME->text_dim, 1);
         }
-        emoji_draw(EMOJI_LOCK, cr.x + cr.w / 2 - 8, ty + 6 * 20 + 12, 16);
+        icon_draw(IC_LOCK, cr.x + cr.w / 2 - 8, ty + 6 * 20 + 12, 16, THEME->text_dim);
         draw_centered_x("Local pages only. Nothing on this page pretends to be the web.", cr, ty + 6 * 20 + 34, THEME->text_dim, 1, false);
     } else if (t->page == XP_ERROR) {
-        emoji_draw(EMOJI_WARN, cr.x + cr.w / 2 - 12, cr.y + 70, 24);
+        icon_draw(IC_WARN, cr.x + cr.w / 2 - 12, cr.y + 70, 24, THEME->accent);
         draw_centered_x("This page can't be shown", cr, 108, THEME->text, 2, true);
         draw_centered_x(t->err_url, cr, 146, THEME->text_dim, 1, false);
         // wrap the reason into <= 2 rows of ~70 chars

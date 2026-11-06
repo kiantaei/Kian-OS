@@ -308,6 +308,7 @@ void notes_event(void *inst, const kian_event_t *e, Rect r) {
 
     int a = e->a;
     char ch = (char)e->b;
+    bool ctrl = (e->c & 2) != 0;   // no clipboard/selection: Ctrl+letters are no-ops
     if (a == KIAN_KEY_LEFT) {
         if (n->caret > 0) n->caret--;
     } else if (a == KIAN_KEY_RIGHT) {
@@ -338,10 +339,10 @@ void notes_event(void *inst, const kian_event_t *e, Rect r) {
         notes_del(n);
     } else if (ch == '\n') {
         notes_insert(n, '\n');
-    } else if (ch == '\t') {
+    } else if (ch == '\t' && !ctrl) {
         notes_insert(n, ' ');
         notes_insert(n, ' ');
-    } else if (ch >= 32 && ch < 127) {
+    } else if (ch >= 32 && ch < 127 && !ctrl) {
         notes_insert(n, ch);
     }
     // keep the caret visible: scroll if it left the viewport
