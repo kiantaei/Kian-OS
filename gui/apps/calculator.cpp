@@ -11,7 +11,8 @@ const long long CALC_SCALE = 10000;
 
 struct CalcApp {
     long long acc;      // scaled
-    long long entry;    // scaled
+    long long entry;    // scaled value parsed from est[]
+    char est[24];       // digits being typed ('-', digits, one '.')
     bool entering;      // typing digits into entry
     int op;             // 0 none, 1 +, 2 -, 3 *, 4 /
     bool fresh;         // next digit starts a new entry
@@ -19,6 +20,29 @@ struct CalcApp {
     int hover_btn;
     char display[40];
 };
+
+static const int P10[5] = { 1, 10, 100, 1000, 10000 };
+
+// parse the typed entry string into CALC_SCALE fixed point (no float)
+static long long calc_parse(const char *s) {
+    long long v = 0;
+    int frac = -1;                     // -1 = integer part, else decimals typed
+    bool neg = false;
+    for (int i = 0; s[i] != '\0'; i++) {
+        char ch = s[i];
+        if (ch == '-') { neg = true; continue; }
+        if (ch == '.') { frac = 0; continue; }
+        if (ch < '0' || ch > '9') continue;
+        int d = ch - '0';
+        if (frac < 0) {
+            if (v < (1LL << 60) / 10) v = v * 10 + (long long)d * CALC_SCALE;
+        } else if (frac < 4) {
+            v += (long long)d * (CALC_SCALE / P10[frac + 1]);
+            frac++;
+        }
+    }
+    return neg ? -v : v;
+}
 
 static void calc_fmt(CalcApp *c) {
     long long v = c->err ? 0 : (c->entering ? c->entry : c->acc);
@@ -120,24 +144,62 @@ static void calc_press(CalcApp *c, int idx) {
     if (idx < 0 || idx > 19) return;
     int r = idx / 4, col = idx % 4;
     const char *l = CALC_LBL[r][col];
-    if (c->err && !(l[0] == 'C' || l[0] == 'C')) { if (strcmp(l, "C") != 0 && strcmp(l, "CE") != 0) return; }
+    if (c->err && strcmp(l, "C") != 0 && strcmp(l, "CE") != 0) return;
+    int elen = (int)strlen(c->est);
     if (l[0] >= '0' && l[0] <= '9' && l[1] == '\0') {
-        if (c->fresh || !c->entering) { c->entry = 0; c->entering = true; c->fresh = false; }
-        c->entry = c->entry * 10 + (l[0] - '0') * CALC_SCALE;
+        // cap: 15 digits before the dot, 4 after (display is 4-dec)
+        bool dot = false;
+        int intd = 0;
+        for (int i = 0; c->est[i] != '\0'; i++) {
+            if (c->est[i] == '.') dot = true; else if (!dot) intd++;
+        }
+        if (elen < 22 && (dot || intd < 15)) {
+            c->est[elen] = l[0];
+            c->est[elen + 1] = '\0';
+            c->entry = calc_parse(c->est);
+            c->entering = true;
+            c->fresh = false;
+        }
     } else if (strcmp(l, ".") == 0) {
-        c->fresh = false; c->entering = true; // decimals beyond 4 are truncated (display is 4-dec)
+        if (elen > 0 && elen < 21) {
+            bool has_dot = false;
+            for (int i = 0; c->est[i] != '\0'; i++) if (c->est[i] == '.') has_dot = true;
+            if (!has_dot) {
+                c->est[elen] = '.';
+                c->est[elen + 1] = '\0';
+                c->entry = calc_parse(c->est);
+                c->entering = true;
+                c->fresh = false;
+            }
+        }
     } else if (strcmp(l, "+/-") == 0) {
-        if (c->entering) c->entry = -c->entry; else c->acc = -c->acc;
+        if (c->entering) {
+            if (c->est[0] == '-') {
+                for (int i = 0; c->est[i] != '\0'; i++) c->est[i] = c->est[i + 1];
+            } else if (elen > 0 && elen < 22) {
+                for (int i = elen; i >= 0; i--) c->est[i + 1] = c->est[i];
+                c->est[0] = '-';
+            }
+            c->entry = calc_parse(c->est);
+        } else {
+            c->acc = -c->acc;
+        }
     } else if (strcmp(l, "C") == 0) {
-        c->acc = 0; c->entry = 0; c->op = 0; c->entering = false; c->fresh = true; c->err = false;
+        c->acc = 0; c->entry = 0; c->est[0] = '\0';
+        c->op = 0; c->entering = false; c->fresh = true; c->err = false;
     } else if (strcmp(l, "CE") == 0) {
-        c->entry = 0; c->entering = false; c->fresh = true;
+        c->est[0] = '\0'; c->entry = 0;
+        c->entering = false; c->fresh = true;
     } else if (strcmp(l, "<-") == 0) {
-        if (c->entering) c->entry /= 10;
+        if (c->entering && elen > 0) {
+            c->est[elen - 1] = '\0';
+            c->entry = calc_parse(c->est);
+            if (c->est[0] == '\0') { c->entering = false; c->fresh = true; }
+        }
     } else if (strcmp(l, "=") == 0) {
         long long v = c->entering ? c->entry : c->acc;
         calc_apply(c, c->op, v);
-        c->op = 0; c->entering = false; c->fresh = true;
+        c->op = 0; c->entering = false; c->est[0] = '\0'; c->fresh = true;
     } else {
         // operator
         long long v = c->entering ? c->entry : c->acc;
@@ -145,6 +207,7 @@ static void calc_press(CalcApp *c, int idx) {
         else c->acc = v;
         c->op = (l[0] == '+') ? 1 : (l[0] == '-') ? 2 : (l[0] == '*') ? 3 : 4;
         c->entering = false;
+        c->est[0] = '\0';
         c->fresh = true;
     }
     calc_fmt(c);
@@ -152,7 +215,7 @@ static void calc_press(CalcApp *c, int idx) {
 
 void *calc_create() {
     CalcApp *c = new CalcApp();
-    c->acc = 0; c->entry = 0; c->entering = false;
+    c->acc = 0; c->entry = 0; c->est[0] = '\0'; c->entering = false;
     c->op = 0; c->fresh = true; c->err = false;
     c->hover_btn = -1;
     c->display[0] = '\0';
@@ -171,7 +234,7 @@ void calc_draw(void *inst, Rect r) {
     // display
     fill_round_rect(r.x + 8, r.y + 8, r.w - 16, 34, 6, THEME->input_bg);
     int dw = text_width(c->display, 1);
-    draw_text(r.x + r.w - 14 - dw, r.y + 22, c->display, THEME->text, 1);
+    draw_text(r.x + r.w - 14 - dw, text_center_y(r.y + 8, 34, 1), c->display, THEME->text, 1);
     // grid: 4x5
     int gx = r.x + 8, gy = r.y + 50;
     int bw = (r.w - 16 - 12) / 4, bh = (r.h - 58 - 16) / 5;
@@ -182,7 +245,7 @@ void calc_draw(void *inst, Rect r) {
         uint32_t bg = (row == 0) ? THEME->icon_bg : op_btn ? THEME->start_bg : THEME->button_bg;
         if (c->hover_btn == i) bg = THEME->start_bg_active;
         fill_round_rect(bx, by, bw, bh, 6, bg);
-        draw_text(bx + (bw - text_width(CALC_LBL[row][col], 1)) / 2, by + (bh - 8) / 2, CALC_LBL[row][col], THEME->button_fg, 1);
+        draw_text(bx + (bw - text_width(CALC_LBL[row][col], 1)) / 2, text_center_y(by, bh, 1), CALC_LBL[row][col], THEME->button_fg, 1);
     }
 }
 

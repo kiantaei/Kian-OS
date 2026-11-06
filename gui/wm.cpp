@@ -251,7 +251,7 @@ void wm_draw_one(WM *wm, Window *w) {
     // title bar
     fill_rect(w->x + 1, w->y + 1, w->w - 2, WM_TITLE_H - 1, THEME->title_bg);
     icon_draw(w->icon, w->x + 8, w->y + (WM_TITLE_H - 16) / 2, 16, THEME->accent);
-    draw_text_bold(w->x + 30, w->y + (WM_TITLE_H - 8) / 2, w->title, THEME->title_text, 1);
+    draw_text_bold(w->x + 30, text_center_y(w->y, WM_TITLE_H, 1), w->title, THEME->title_text, 1);
 
     // caption buttons (close red on hover)
     int by = w->y + (WM_TITLE_H - 16) / 2;

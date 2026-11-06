@@ -68,7 +68,7 @@ void taskmgr_draw(void *inst, Rect r) {
     // End task button
     bool hov = mouse_in(r.x + 10, r.y + 188, 100, 26);
     fill_round_rect(r.x + 10, r.y + 188, 100, 26, 6, hov ? THEME->close_btn_bg : THEME->button_bg);
-    draw_text(r.x + 30, r.y + 197, "End task", THEME->button_fg, 1);
+    draw_text(r.x + 30, text_center_y(r.y + 188, 26, 1), "End task", THEME->button_fg, 1);
 
     // stats
     uint64_t used = 0, total = 0;
@@ -91,7 +91,7 @@ void taskmgr_draw(void *inst, Rect r) {
     line[k++] = 'i';
     line[k++] = 'B';
     line[k] = '\0';
-    draw_text(r.x + 120, r.y + 197, line, THEME->text_dim, 1);
+    draw_text(r.x + 120, text_center_y(r.y + 188, 26, 1), line, THEME->text_dim, 1);
 
     // CPU graph placeholder (clearly labeled)
     Rect gr = { r.x + 10, r.y + 226, r.w - 20, r.h - 240 };

@@ -259,7 +259,7 @@ void taskbar_draw(Desktop *d) {
     Rect se = tb_search_rect();
     fill_round_rect(se.x, H - TB_H + 8, se.w, 32, 16, THEME->input_bg);
     icon_draw(IC_SEARCH, se.x + 10, H - TB_H + 14, 16, THEME->text_dim);
-    draw_text(se.x + 32, H - TB_H + 18, "Search", THEME->text_dim, 1);
+    draw_text(se.x + 32, text_center_y(H - TB_H + 8, 32, 1), "Search", THEME->text_dim, 1);
 
     // task view button
     Rect tv = tb_tv_rect();
@@ -289,7 +289,7 @@ void taskbar_draw(Desktop *d) {
     const char *lang = d->lang_fa ? "FA" : "ENG";
     int lw = text_width(lang, 1);
     x -= lw + 4;
-    draw_text(x + 2, H - TB_H + 20, lang, fg, 1);
+    draw_text(x + 2, text_center_y(H - TB_H, TB_H, 1), lang, fg, 1);
     x -= 20; icon_draw(IC_SYNC, x, H - TB_H + 15, 18, fg);
     x -= 16; icon_draw(IC_CHEVUP, x, H - TB_H + 15, 18, fg);
 
@@ -299,14 +299,15 @@ void taskbar_draw(Desktop *d) {
     char l1[24], l2[24];
     fmt_clock(l1, sizeof(l1), t, d->clock24);
     fmt_date(l2, sizeof(l2), t);
-    draw_text(W - 8 - 76, H - TB_H + 8, l1, fg, 1);
-    draw_text(W - 8 - 76, H - TB_H + 24, l2, fg, 1);
+    draw_text(W - 8 - 76, H - TB_H + 6, l1, fg, 1);
+    draw_text(W - 8 - 76, H - TB_H + 23, l2, fg, 1);
 
     // tooltip after 600 ms hover
     if (d->tooltip_on && d->hover_btn >= 0 && mouse_idle_ms() >= 600 && IN->btns == 0) {
         const char *name = (d->hover_btn == 0) ? "Start" : (d->hover_btn == 1) ? "Search"
                          : (d->hover_btn == 2) ? "Task view" : PIN_NAME[d->hover_btn - 3];
-        tooltip_draw(IN->mx + 8, H - TB_H - 26, name);
+        int tooltip_y = H - TB_H - 30;
+        tooltip_draw(IN->mx + 8, tooltip_y, name);
     }
 }
 
@@ -457,7 +458,7 @@ void start_menu_toggle(Desktop *d) {
 
 static void draw_tile(int x, int y, int w, int h, const TileDef *td, bool hover) {
     if (hover) fill_round_rect(x, y, w, h, 6, THEME->start_bg_active);
-    icon_draw(td->icon, x + (w - 24) / 2, y + 10, 24, THEME->text);
+    icon_draw(td->icon, x + (w - 24) / 2, y + 8, 24, THEME->text);
     draw_text(x + (w - text_width(td->name, 1)) / 2, y + 42, td->name, THEME->text_dim, 1);
 }
 
@@ -475,7 +476,7 @@ void start_menu_draw(Desktop *d) {
     tbox_draw(&d->sbox);
 
     // pinned grid (filtered)
-    draw_text_bold(p.x + 12, p.y + 56, "Pinned", THEME->text, 2);
+    draw_text_bold(p.x + 12, p.y + 54, "Pinned", THEME->text, 2);
     const char *q = tbox_text(&d->sbox);
     int tw = (p.w - 24) / 6;
     int shown = 0;
@@ -491,17 +492,17 @@ void start_menu_draw(Desktop *d) {
     if (shown == 0) draw_text(p.x + 12, p.y + 100, "No matching apps", THEME->text_dim, 1);
 
     // recommended
-    int ry = p.y + 92 + 2 * 72 + 10;
+    int ry = p.y + 92 + 2 * 72 + 6;
     draw_text_bold(p.x + 12, ry, "Recommended", THEME->text, 2);
     const char *rec[2] = { "readme.txt", "welcome.txt" };
     const char *recp[2] = { "/Documents/readme.txt", "/Desktop/welcome.txt" };
     for (int i = 0; i < 2; i++) {
         if (*q != '\0' && !ci_contains(rec[i], q)) continue;
-        int iy = ry + 30 + i * 26;
-        bool hov = mouse_in(p.x + 12, iy, 240, 24);
-        if (hov) fill_round_rect(p.x + 12, iy, 240, 24, 4, THEME->start_bg_active);
-        icon_draw(IC_NOTES, p.x + 18, iy + 4, 16, THEME->accent);
-        draw_text(p.x + 42, iy + 8, rec[i], THEME->text, 1);
+        int iy = ry + 40 + i * 30;
+        bool hov = mouse_in(p.x + 12, iy, 240, 26);
+        if (hov) fill_round_rect(p.x + 12, iy, 240, 26, 4, THEME->start_bg_active);
+        icon_draw(IC_NOTES, p.x + 18, iy + 5, 16, THEME->accent);
+        draw_text(p.x + 42, text_center_y(iy, 26, 1), rec[i], THEME->text, 1);
         (void)recp;
     }
 
@@ -509,8 +510,8 @@ void start_menu_draw(Desktop *d) {
     int by = p.y + p.h - 44;
     hline(p.x + 8, by, p.w - 16, THEME->menu_border);
     fill_circle(p.x + 26, by + 20, 12, THEME->start_bg_active);
-    draw_text_bold(p.x + 22, by + 16, "K", 0x00FFFFFF, 1);
-    draw_text(p.x + 44, by + 16, "kian", THEME->text, 1);
+    draw_text_bold(p.x + 21, text_center_y(by + 8, 24, 1), "K", 0x00FFFFFF, 1);
+    draw_text(p.x + 44, text_center_y(by + 8, 24, 1), "kian", THEME->text, 1);
     Rect pw = { p.x + p.w - 40, by + 6, 32, 32 };
     bool phov = mouse_in(pw.x, pw.y, pw.w, pw.h);
     if (phov) fill_round_rect(pw.x, pw.y, pw.w, pw.h, 6, THEME->start_bg_active);
@@ -559,10 +560,10 @@ bool start_menu_event(Desktop *d, const kian_event_t *e) {
         if (shown >= 12) break;
     }
     // recommended
-    int ry = p.y + 92 + 2 * 72 + 10;
+    int ry = p.y + 92 + 2 * 72 + 6;
     for (int i = 0; i < 2; i++) {
-        int iy = ry + 30 + i * 26;
-        if (rect_hit(IN->mx, IN->my, Rect{ p.x + 12, iy, 240, 24 })) {
+        int iy = ry + 40 + i * 30;
+        if (rect_hit(IN->mx, IN->my, Rect{ p.x + 12, iy, 240, 26 })) {
             d->start_open = false;
             app_open_path(APP_NOTES, (i == 0) ? "/Documents/readme.txt" : "/Desktop/welcome.txt");
             return true;
@@ -592,7 +593,7 @@ static bool pill(int x, int y, int w, int h, const char *label, int icon, bool o
     uint32_t bg = on ? THEME->accent : (hov ? THEME->start_bg_active : THEME->button_bg);
     fill_round_rect(x, y, w, h, 6, bg);
     icon_draw(icon, x + 10, y + (h - 16) / 2, 16, 0x00FFFFFF);
-    draw_text(x + 34, y + (h - 8) / 2, label, 0x00FFFFFF, 1);
+    draw_text(x + 34, text_center_y(y, h, 1), label, 0x00FFFFFF, 1);
     return hov;
 }
 
@@ -683,29 +684,25 @@ void cal_draw(Desktop *d) {
 
     static const char *dow[7] = { "S", "M", "T", "W", "T", "F", "S" };
     int cw = 40, ch = 30;
-    int ox = p.x + 10, oy = p.y + 50;
+    int ox = p.x + 10, oy = p.y + 52;
     for (int c = 0; c < 7; c++) {
-        draw_text(ox + c * cw + 14, oy, dow[c], THEME->text_dim, 1);
+        draw_text(ox + c * cw + cw / 2 - text_width(dow[c], 1) / 2, oy, dow[c], THEME->text_dim, 1);
     }
     int first_dow = ((days_from_civil(t.year, t.month, 1) + 4) % 7 + 7) % 7; // 0 = Sunday
     int nd = month_days(t.year, t.month);
     int row = 0, col = first_dow;
     for (int day = 1; day <= nd; day++) {
         int dx = ox + col * cw, dy = oy + ch + row * ch;
+        char db[4];
+        int k = 0;
+        db[0] = '\0';
+        put_num(db, k, day);
+        int tx2 = dx + cw / 2 - text_width(db, 1) / 2;
         if (day == t.day) {
-            fill_circle(dx + cw / 2, dy + 10, 11, THEME->accent);
-            draw_text(dx + cw / 2 - (day >= 10 ? 5 : 2), dy + 6, "", THEME->text, 1);
-            char db[4];
-            int k = 0;
-            db[0] = '\0';
-            put_num(db, k, day);
-            draw_text(dx + cw / 2 - text_width(db, 1) / 2, dy + 6, db, 0x00FFFFFF, 1);
+            fill_circle(dx + cw / 2, dy + 15, 12, THEME->accent);
+            draw_text(tx2, text_center_y(dy, ch, 1), db, 0x00FFFFFF, 1);
         } else {
-            char db[4];
-            int k = 0;
-            db[0] = '\0';
-            put_num(db, k, day);
-            draw_text(dx + cw / 2 - text_width(db, 1) / 2, dy + 6, db, THEME->text, 1);
+            draw_text(tx2, text_center_y(dy, ch, 1), db, THEME->text, 1);
         }
         col++;
         if (col == 7) { col = 0; row++; }
@@ -760,8 +757,8 @@ void toast_draw(Desktop *d) {
     fill_round_rect(x, r.y, r.w, r.h, 6, THEME->menu_border);
     fill_round_rect(x + 1, r.y + 1, r.w - 2, r.h - 2, 6, THEME->menu_bg);
     fill_rect(x + 1, r.y + 8, 4, r.h - 16, THEME->accent);
-    draw_text(x + 16, r.y + 10, "Kian OS", THEME->text_dim, 1);
-    draw_text(x + 16, r.y + 28, d->toast_text, THEME->text, 1);
+    draw_text(x + 16, r.y + 8, "Kian OS", THEME->text_dim, 1);
+    draw_text(x + 16, r.y + 26, d->toast_text, THEME->text, 1);
 }
 
 // ---------------- task view + virtual desktops ----------------
@@ -794,12 +791,12 @@ void taskview_draw(Desktop *d) {
         for (; pfx[k] != '\0'; k++) lbl[k] = pfx[k];
         put_num(lbl, k, i + 1);
         lbl[k] = '\0';
-        draw_text(pr.x + (pr.w - text_width(lbl, 1)) / 2, pr.y + 13, lbl, 0x00FFFFFF, 1);
+        draw_text(pr.x + (pr.w - text_width(lbl, 1)) / 2, text_center_y(pr.y, pr.h, 1), lbl, 0x00FFFFFF, 1);
     }
     Rect nb = { px + 310, 70, 130, 34 };
     fill_round_rect(nb.x, nb.y, nb.w, nb.h, 6, THEME->button_bg);
     icon_draw(IC_PLUS, nb.x + 10, nb.y + 9, 16, THEME->button_fg);
-    draw_text(nb.x + 32, nb.y + 13, "New desktop", THEME->button_fg, 1);
+    draw_text(nb.x + 32, text_center_y(nb.y, nb.h, 1), "New desktop", THEME->button_fg, 1);
 
     // window thumbnails (honest: scaled frames, not real content screenshots)
     int count = 0;
@@ -811,10 +808,10 @@ void taskview_draw(Desktop *d) {
         int ty = 130 + (count / cols) * 160;
         // scale rect to 180x120 with integer nearest-neighbor geometry
         fill_round_rect(tx, ty, 180, 120, 6, w->desk_id == d->cur_desk ? THEME->win_frame : THEME->icon_bg);
-        fill_rect(tx + 2, ty + 2, 176, 20, THEME->title_bg);
-        icon_draw(w->icon, tx + 6, ty + 4, 14, THEME->accent);
-        draw_text(tx + 26, ty + 6, w->title, THEME->title_text, 1);
-        fill_rect(tx + 2, ty + 22, 176, 96, THEME->win_bg);
+        fill_rect(tx + 2, ty + 2, 176, 22, THEME->title_bg);
+        icon_draw(w->icon, tx + 6, ty + 6, 14, THEME->accent);
+        draw_text(tx + 26, text_center_y(ty + 2, 22, 1), w->title, THEME->title_text, 1);
+        fill_rect(tx + 2, ty + 24, 176, 94, THEME->win_bg);
         // mini content hint: three dim lines
         blend_rect(tx + 10, ty + 34, 160, 4, THEME->text_dim, 90);
         blend_rect(tx + 10, ty + 44, 140, 4, THEME->text_dim, 90);

@@ -56,15 +56,15 @@ static void draw_login_ui(TBox *pass, Btn *signin, bool lock_mode, bool wrong, u
     l2[i++] = '/';
     put_num_l(l2, i, t.year);
     l2[i] = '\0';
-    draw_centered(l1, GFX->h / 4, 0x00F0F0F8, 4, true);
-    draw_centered(l2, GFX->h / 4 + 44, 0x00C0C8D8, 2, false);
+    draw_centered(l1, GFX->h / 4 - 16, 0x00F0F0F8, 4, true);
+    draw_centered(l2, GFX->h / 4 + 64, 0x00C0C8D8, 2, false);
 
     // avatar + user
     int cy = GFX->h / 2 + 30;
     fill_circle(GFX->w / 2, cy, 30, THEME->accent);
-    draw_centered("K", cy - 12, 0x00FFFFFF, 2, true);
+    draw_centered("K", cy - 14, 0x00FFFFFF, 2, true);
     draw_centered("kian", cy + 44, 0x00F0F0F8, 2, true);
-    if (lock_mode) draw_centered("Locked", cy + 70, THEME->text_dim, 1, false);
+    if (lock_mode) draw_centered("Locked", cy + 84, THEME->text_dim, 1, false);
 
     // password box (dots) + sign in
     int bw = 280;

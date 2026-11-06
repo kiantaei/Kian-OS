@@ -68,18 +68,18 @@ void paint_draw(void *inst, Rect r) {
     tx += 8;
     bool hov = mouse_in(tx, ty, 58, 22);
     fill_round_rect(tx, ty, 58, 22, 4, p->erase ? THEME->accent : (hov ? THEME->start_bg_active : THEME->button_bg));
-    draw_text(tx + 12, ty + 7, "Eraser", p->erase ? 0x00FFFFFF : THEME->button_fg, 1);
+    draw_text(tx + 12, text_center_y(ty, 22, 1), "Eraser", p->erase ? 0x00FFFFFF : THEME->button_fg, 1);
     tx += 66;
     static const char *sz[3] = { "S", "M", "L" };
     static const int szv[3] = { 2, 4, 8 };
     for (int i = 0; i < 3; i++) {
         bool sh = mouse_in(tx, ty, 30, 22);
         fill_round_rect(tx, ty, 30, 22, 4, (p->size == szv[i]) ? THEME->accent : (sh ? THEME->start_bg_active : THEME->button_bg));
-        draw_text(tx + 12, ty + 7, sz[i], (p->size == szv[i]) ? 0x00FFFFFF : THEME->button_fg, 1);
+        draw_text(tx + 12, text_center_y(ty, 22, 1), sz[i], (p->size == szv[i]) ? 0x00FFFFFF : THEME->button_fg, 1);
         tx += 34;
     }
     fill_round_rect(tx, ty, 50, 22, 4, mouse_in(tx, ty, 50, 22) ? THEME->start_bg_active : THEME->button_bg);
-    draw_text(tx + 12, ty + 7, "Clear", THEME->button_fg, 1);
+    draw_text(tx + 12, text_center_y(ty, 22, 1), "Clear", THEME->button_fg, 1);
 
     // canvas (blit with clipping)
     Rect cv = { r.x + 8, r.y + 40, imin(P_CW, r.w - 16), imin(P_CH, r.h - 48) };

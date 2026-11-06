@@ -4,6 +4,7 @@
 #include "icons.h"
 #include "input.h"
 #include "util.h"
+#include "font.h"
 
 // ================= Button =================
 
@@ -24,7 +25,7 @@ void btn_draw(const Btn *b) {
     int iw = (b->icon != IC_NONE) ? 16 : 0;
     int total = tw + iw + ((iw && tw) ? 6 : 0);
     int tx = b->x + (b->w - total) / 2;
-    int ty = b->y + (b->h - 8) / 2;
+    int ty = text_center_y(b->y, b->h, 1);
     if (b->icon != IC_NONE) {
         icon_draw(b->icon, tx, b->y + (b->h - 16) / 2, 16, fg);
         tx += iw + 6;
@@ -86,7 +87,7 @@ void tbox_draw(const TBox *t) {
     int bx = t->x + shk;
     fill_round_rect(bx, t->y, t->w, t->h, 4, bg);
     round_rect_outline(bx, t->y, t->w, t->h, 4, border);
-    int ty = t->y + (t->h - 8) / 2;
+    int ty = text_center_y(t->y, t->h, 1);
     int tx = bx + 6;
     for (int i = 0; i < t->len; i++) {
         char ch = t->buf[i];
@@ -100,7 +101,8 @@ void tbox_draw(const TBox *t) {
             char ch = t->buf[i];
             cx2 += glyph_advance(t->password ? '*' : ch, 1);
         }
-        vline(cx2 + 1, ty, 9, THEME->accent);
+        vline(cx2 + 1, ty + FONT_UI_CAP_TOP - 1,
+              (FONT_UI_CAP_BOT - FONT_UI_CAP_TOP + 1) + 2, THEME->accent);
     }
 }
 
@@ -172,7 +174,7 @@ void chk_draw(const Chk *c) {
     round_rect_outline(c->x, c->y, 18, 18, 4, border);
     if (c->checked) fill_round_rect(c->x + 2, c->y + 2, 14, 14, 3, box);
     if (c->checked) icon_draw(IC_CHECK, c->x + 3, c->y + 3, 12, 0x00FFFFFF);
-    draw_text(c->x + 26, c->y + 5, c->label, THEME->text, 1);
+    draw_text(c->x + 26, text_center_y(c->y, 18, 1), c->label, THEME->text, 1);
 }
 
 bool chk_event(Chk *c, const kian_event_t *e) {
@@ -205,7 +207,6 @@ void slider_draw(const Slider *s) {
 }
 
 bool slider_event(Slider *s, const kian_event_t *e) {
-    int ty = s->y + 7;
     if (e->type == KIAN_EV_MOUSE_BTN) {
         if (IN->press_l && mouse_in(s->x - 8, s->y - 4, s->w + 16, 24)) s->dragging = true;
         if (IN->release_l) s->dragging = false;
@@ -266,7 +267,7 @@ void listv_draw(const ListView *lv, const char *const *labels) {
         int ry = lv->y + i * lv->row_h;
         if (row == lv->selected) fill_rect(lv->x, ry, lv->w, lv->row_h, THEME->select_bg);
         if (labels && labels[row]) {
-            draw_text(lv->x + 6, ry + (lv->row_h - 8) / 2, labels[row], THEME->text, 1);
+            draw_text(lv->x + 6, text_center_y(ry, lv->row_h, 1), labels[row], THEME->text, 1);
         }
     }
     // mini scrollbar
@@ -330,7 +331,7 @@ bool sbar_event(SBar *sb, const kian_event_t *e) {
 // ================= Menu =================
 
 static int menu_item_h(int i, const Menu *m) {
-    return (m->items[i].id < 0) ? 9 : 26;
+    return (m->items[i].id < 0) ? 9 : 28;
 }
 
 static int menu_height(const Menu *m) {
@@ -375,7 +376,7 @@ void menu_draw(const Menu *m) {
             hline(m->x + 8, y + 4, m->w - 16, THEME->menu_border);
         } else {
             if (i == m->hover) fill_round_rect(m->x + 4, y, m->w - 8, h, 4, THEME->start_bg_active);
-            draw_text(m->x + 12, y + (h - 8) / 2, m->items[i].label, THEME->text, 1);
+            draw_text(m->x + 12, text_center_y(y, h, 1), m->items[i].label, THEME->text, 1);
         }
         y += h;
     }
@@ -430,12 +431,12 @@ bool menu_event(Menu *m, const kian_event_t *e) {
 
 void tooltip_draw(int x, int y, const char *text) {
     int w = text_width(text, 1) + 12;
-    int h = 20;
+    int h = 24;
     x = iclamp(x, 0, (GFX ? GFX->w - w - 1 : 0));
     y = iclamp(y, 0, (GFX ? GFX->h - h - 1 : 0));
     fill_round_rect(x, y, w, h, 4, THEME->menu_border);
     fill_round_rect(x + 1, y + 1, w - 2, h - 2, 4, THEME->menu_bg);
-    draw_text(x + 6, y + 6, text, THEME->text, 1);
+    draw_text(x + 6, text_center_y(y, h, 1), text, THEME->text, 1);
 }
 
 // ================= TabBar =================
@@ -445,15 +446,15 @@ void tabbar_draw(const TabBar *tb) {
     for (int i = 0; i < tb->n; i++) {
         int tw = text_width(tb->tabs[i], 1) + 20;
         bool act = (i == tb->active);
-        if (act) fill_round_rect(x, tb->y, tw, 24, 6, THEME->select_bg);
-        draw_text(x + 10, tb->y + 8, tb->tabs[i], act ? THEME->accent : THEME->text, 1);
-        if (act) hline(x + 4, tb->y + 23, tw - 8, THEME->accent);
+        if (act) fill_round_rect(x, tb->y, tw, 26, 6, THEME->select_bg);
+        draw_text(x + 10, text_center_y(tb->y, 26, 1), tb->tabs[i], act ? THEME->accent : THEME->text, 1);
+        if (act) hline(x + 4, tb->y + 25, tw - 8, THEME->accent);
         x += tw + 4;
     }
 }
 
 int tabbar_hit(const TabBar *tb, int mx, int my) {
-    if (my < tb->y || my >= tb->y + 24) return -1;
+    if (my < tb->y || my >= tb->y + 26) return -1;
     int x = tb->x;
     for (int i = 0; i < tb->n; i++) {
         int tw = text_width(tb->tabs[i], 1) + 20;

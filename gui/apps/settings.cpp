@@ -24,6 +24,8 @@ struct SetApp {
     Chk chk_dark;
     Chk chk_24h;
     int sel_wall;
+    int accent_y;          // y of the accent swatch row (draw sets, event reads)
+    int wall_y;            // y of the wallpaper previews
 };
 
 void *setapp_create() {
@@ -33,6 +35,8 @@ void *setapp_create() {
     chk_init(&s->chk_24h, 0, 0, "24-hour clock");
     s->chk_dark.checked = true;
     s->sel_wall = 0;
+    s->accent_y = 0;
+    s->wall_y = 0;
     return s;
 }
 
@@ -48,7 +52,7 @@ static void set_nav(SetApp *s, Rect r) {
         bool hov = mouse_in(r.x + 6, y, r.w - 24, 26);
         if (act) fill_round_rect(r.x + 6, y, r.w - 24, 26, 4, THEME->select_bg);
         else if (hov) fill_round_rect(r.x + 6, y, r.w - 24, 26, 4, THEME->start_bg_active);
-        draw_text(r.x + 16, y + 9, PG_NAMES[i], act ? THEME->accent : THEME->text, 1);
+        draw_text(r.x + 16, text_center_y(y, 26, 1), PG_NAMES[i], act ? THEME->accent : THEME->text, 1);
     }
 }
 
@@ -65,18 +69,20 @@ void setapp_draw(void *inst, Rect r) {
     int tx = c.x + 16, ty = c.y + 14;
     if (s->page == PG_PERSON) {
         draw_text_bold(tx, ty, "Personalization", THEME->text, 2);
-        ty += 36;
+        ty += 44;                                   // scale-2 title is 36 px em
         draw_text(tx, ty, "Accent color", THEME->text, 1);
         ty += 18;
+        s->accent_y = ty;
         for (int i = 0; i < 8; i++) {
             int sx2 = tx + i * 34;
             fill_round_rect(sx2, ty, 28, 28, 4, ACCENTS[i]);
             if (ACCENTS[i] == THEME->accent) round_rect_outline(sx2, ty, 28, 28, 4, THEME->text);
             else if (mouse_in(sx2, ty, 28, 28)) round_rect_outline(sx2, ty, 28, 28, 4, THEME->menu_border);
         }
-        ty += 44;
+        ty += 40;
         draw_text(tx, ty, "Wallpaper", THEME->text, 1);
         ty += 18;
+        s->wall_y = ty;
         static const uint32_t wt[3] = { 0x001A2B4A, 0x000E2A1E, 0x00102030 };
         static const uint32_t wb[3] = { 0x003B0A45, 0x00A05030, 0x006070A0 };
         for (int i = 0; i < 3; i++) {
@@ -91,12 +97,11 @@ void setapp_draw(void *inst, Rect r) {
         chk_draw(&s->chk_dark);
     } else if (s->page == PG_TIME) {
         draw_text_bold(tx, ty, "Time & Language", THEME->text, 2);
-        ty += 36;
+        ty += 44;
         draw_text(tx, ty, "Time zone: Asia/Tehran (UTC+03:30)", THEME->text, 1);
-        draw_text(tx, ty + 14, "No daylight saving (fixed +03:30)", THEME->text_dim, 1);
-        ty += 40;
+        draw_text(tx, ty + 16, "No daylight saving (fixed +03:30)", THEME->text_dim, 1);
         s->chk_24h.x = tx;
-        s->chk_24h.y = ty;
+        s->chk_24h.y = ty + 42;
         s->chk_24h.checked = SH->desk.clock24;
         chk_draw(&s->chk_24h);
     } else if (s->page == PG_NETWORK) {
@@ -166,7 +171,7 @@ void setapp_event(void *inst, const kian_event_t *e, Rect r) {
             if (mouse_in(r.x + 6, y, 126, 26)) { s->page = i; shell_mark_content(); return; }
         }
         if (s->page == PG_PERSON) {
-            int tx = r.x + 166, ty = r.y + 50;
+            int tx = r.x + 166, ty = s->accent_y;
             for (int i = 0; i < 8; i++) {
                 if (mouse_in(tx + i * 34, ty, 28, 28)) {
                     bool dark = (THEME->wallpaper_top == 0x001A2B4A);
@@ -175,7 +180,7 @@ void setapp_event(void *inst, const kian_event_t *e, Rect r) {
                     return;
                 }
             }
-            ty += 62;
+            ty = s->wall_y;
             for (int i = 0; i < 3; i++) {
                 if (mouse_in(tx + i * 96, ty, 88, 44)) {
                     s->sel_wall = i;
@@ -184,7 +189,8 @@ void setapp_event(void *inst, const kian_event_t *e, Rect r) {
                     return;
                 }
             }
-            ty += 58;
+            s->chk_dark.x = tx;
+            s->chk_dark.y = s->wall_y + 58;
             if (chk_event(&s->chk_dark, e)) {
                 bool dark = (THEME->wallpaper_top == 0x001A2B4A);
                 theme_set(THEME, !dark, THEME->accent);
@@ -192,13 +198,10 @@ void setapp_event(void *inst, const kian_event_t *e, Rect r) {
                 return;
             }
         } else if (s->page == PG_TIME) {
-            int tx = r.x + 166;
-            int ty = r.y + 90;
-            Chk tmp = s->chk_24h;
-            tmp.x = tx; tmp.y = ty;
-            if (chk_event(&tmp, e)) {
-                s->chk_24h.checked = tmp.checked;
-                SH->desk.clock24 = tmp.checked;
+            s->chk_24h.x = r.x + 166;
+            s->chk_24h.y = r.y + 100;
+            if (chk_event(&s->chk_24h, e)) {
+                SH->desk.clock24 = s->chk_24h.checked;
                 shell_full_redraw();
                 return;
             }

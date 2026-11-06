@@ -37,12 +37,24 @@ void gradient_v(int x, int y, int w, int h, uint32_t top, uint32_t bottom);
 void blit(const uint32_t *src, int src_stride, int sx, int sy, int dx, int dy, int w, int h);
 void shadow_rect(int x, int y, int w, int h);            // soft 3-layer shadow
 
-int  glyph_advance(char c, int scale);
+int  glyph_advance(char c, int scale);              // UI font (proportional)
 void draw_text(int x, int y, const char *s, uint32_t c, int scale);
 void draw_text_bold(int x, int y, const char *s, uint32_t c, int scale);
 int  text_width(const char *s, int scale);
 int  text_width_n(const char *s, int n, int scale);  // width of the first n chars
 int  text_line_height(int scale);
+// vertical centering: y to pass to draw_text() so the glyph ink (cap band)
+// sits centered inside a box of the given height
+int  text_center_y(int box_y, int box_h, int scale);
+
+// ---- mono font (8x16 cell) for the terminal / text editors ----
+int  glyph_advance_mono(int scale);                 // FONT_MONO_CELL * scale
+int  text_line_height_mono(int scale);              // FONT_MONO_ROWS * scale
+void draw_text_mono(int x, int y, const char *s, uint32_t c, int scale);
+void draw_text_mono_bold(int x, int y, const char *s, uint32_t c, int scale);
+int  text_width_mono(const char *s, int scale);     // len * cell * scale
+int  mono_caret_y(int line_y);                      // y/height of the caret bar
+int  mono_caret_h();
 
 bool rect_hit(int px, int py, const Rect &r);
 bool rect_overlap(const Rect &a, const Rect &b);

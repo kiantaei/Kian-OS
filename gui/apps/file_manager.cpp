@@ -129,26 +129,29 @@ static void files_menu_cb(void *ud, int id) {
     }
 }
 
+static bool files_sidebar_active(FileApp *f, int i) {
+    static const char *paths[4] = { "/", "/Desktop", "/Documents", "/Downloads" };
+    if (i == FS_TRASH) return f->cur == ramfs_trash();
+    RNode *d = ramfs_resolve(paths[i]);
+    return d != 0 && f->cur == d;
+}
+
 static void files_sidebar(FileApp *f, Rect r) {
     static const char *labels[5] = { "Home", "Desktop", "Documents", "Downloads", "Trash" };
     static const int icons[5] = { IC_PC, IC_GRID, IC_NOTES, IC_FILES, IC_TRASH };
-    static const char *paths[5] = { "/", "/Desktop", "/Documents", "/Downloads", "" };
     for (int i = 0; i < 5; i++) {
         int y = r.y + 8 + i * 30;
         bool hov = mouse_in(r.x + 4, y, 120, 26);
-        bool act = (strcmp(f->cur->name, labels[i]) == 0) || (i == FS_TRASH && f->cur == ramfs_trash());
+        bool act = files_sidebar_active(f, i);
         if (act) fill_round_rect(r.x + 4, y, 120, 26, 4, THEME->select_bg);
         else if (hov) fill_round_rect(r.x + 4, y, 120, 26, 4, THEME->start_bg_active);
         icon_draw(icons[i], r.x + 12, y + 5, 16, THEME->accent);
-        draw_text(r.x + 34, y + 9, labels[i], THEME->text, 1);
-        (void)paths;
+        draw_text(r.x + 34, text_center_y(y, 26, 1), labels[i], THEME->text, 1);
     }
-    // remember hit rows for the event handler
 }
 
 static int files_sidebar_hit(Rect r, int mx, int my) {
     for (int i = 0; i < 5; i++) {
-        if (mouse_in(mx - r.x, my - r.y, 1, 1)) { /* fallthrough */ }
         if (mx >= r.x + 4 && mx < r.x + 124 && my >= r.y + 8 + i * 30 && my < r.y + 34 + i * 30) return i;
     }
     return -1;
@@ -193,7 +196,7 @@ void files_draw(void *inst, Rect r) {
     char path[192];
     ramfs_path(f->cur, path, sizeof(path));
     fill_round_rect(tx, ty, r.x + r.w - 30 - tx, 24, 4, THEME->input_bg);
-    draw_text(tx + 6, ty + 8, path, THEME->text, 1);
+    draw_text(tx + 6, text_center_y(ty, 24, 1), path, THEME->text, 1);
     tx = r.x + r.w - 28;
     fill_round_rect(tx, ty, 24, 24, 4, mouse_in(tx, ty, 24, 24) ? THEME->start_bg_active : THEME->button_bg);
     icon_draw(f->icons_view ? IC_NOTES : IC_GRID, tx + 4, ty + 4, 16, THEME->button_fg);
@@ -217,7 +220,7 @@ void files_draw(void *inst, Rect r) {
             if (sel) fill_round_rect(ix, iy, 92, 80, 4, THEME->select_bg);
             else if (hov) fill_round_rect(ix, iy, 92, 80, 4, THEME->start_bg_active);
             icon_draw(ramfs_is_dir(f->items[i]) ? IC_FILES : IC_NOTES, ix + 34, iy + 12, 24, THEME->accent);
-            draw_text(ix + (92 - text_width(f->items[i]->name, 1)) / 2, iy + 50, f->items[i]->name, THEME->text, 1);
+            draw_text(ix + (92 - text_width(f->items[i]->name, 1)) / 2, iy + 52, f->items[i]->name, THEME->text, 1);
             shown++;
             if (iy + 84 > f->list.y + f->list.h) break;
         }
@@ -241,23 +244,23 @@ void files_draw(void *inst, Rect r) {
 
     // dialog overlay (new folder / new file / rename)
     if (f->dialog != FDLG_NONE) {
-        int dw = 220, dh = 90;
+        int dw = 220, dh = 96;
         int dx = r.x + (r.w - dw) / 2, dy = r.y + (r.h - dh) / 2;
         fill_round_rect(dx, dy, dw, dh, 6, THEME->menu_border);
         fill_round_rect(dx + 1, dy + 1, dw - 2, dh - 2, 6, THEME->menu_bg);
         draw_text(dx + 10, dy + 10, f->dialog == FDLG_NEWFOLDER ? "New folder name:"
                   : f->dialog == FDLG_NEWFILE ? "New file name:" : "New name:", THEME->text, 1);
         f->dlg.x = dx + 10;
-        f->dlg.y = dy + 30;
+        f->dlg.y = dy + 34;
         f->dlg.w = dw - 20;
-        f->dlg.h = 26;
+        f->dlg.h = 28;
         tbox_draw(&f->dlg);
-        draw_text(dx + 10, dy + dh - 24, "Enter = OK   Esc = Cancel", THEME->text_dim, 1);
+        draw_text(dx + 10, dy + dh - 22, "Enter = OK   Esc = Cancel", THEME->text_dim, 1);
     }
 
     // status bar
     fill_rect(r.x, r.y + r.h - 20, r.w, 20, THEME->icon_bg);
-    draw_text(r.x + 8, r.y + r.h - 16, f->status, THEME->text_dim, 1);
+    draw_text(r.x + 8, text_center_y(r.y + r.h - 20, 20, 1), f->status, THEME->text_dim, 1);
 }
 
 void files_event(void *inst, const kian_event_t *e, Rect r) {

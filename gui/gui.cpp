@@ -140,7 +140,7 @@ static void draw_ctrldel() {
         int by = y + 56 + i * 42;
         bool hov = mouse_in(x + 16, by, w - 32, 34);
         fill_round_rect(x + 16, by, w - 32, 34, 6, hov ? THEME->start_bg_active : THEME->button_bg);
-        draw_text(x + 28, by + 13, lbl[i], THEME->button_fg, 1);
+        draw_text(x + 28, text_center_y(by, 34, 1), lbl[i], THEME->button_fg, 1);
     }
 }
 
@@ -168,16 +168,16 @@ static bool ctrldel_event(const kian_event_t *e) {
 }
 
 static void draw_run() {
-    int w = 380, h = 130;
+    int w = 380, h = 150;
     int x = (GFX->w - w) / 2, y = (GFX->h - h) / 2;
     fill_round_rect(x, y, w, h, 8, THEME->menu_border);
     fill_round_rect(x + 1, y + 1, w - 2, h - 2, 8, THEME->menu_bg);
     draw_text_bold(x + 16, y + 12, "Run", THEME->text, 2);
-    draw_text(x + 16, y + 40, "Type a program name (terminal, files, notepad, calc...)", THEME->text_dim, 1);
+    draw_text(x + 16, y + 50, "Type a program name (terminal, files, notepad, calc...)", THEME->text_dim, 1);
     SH->run_box.x = x + 16;
-    SH->run_box.y = y + 62;
+    SH->run_box.y = y + 72;
     SH->run_box.w = w - 32;
-    SH->run_box.h = 28;
+    SH->run_box.h = 30;
     tbox_draw(&SH->run_box);
 }
 
@@ -205,7 +205,7 @@ static bool run_event(const kian_event_t *e) {
         return true; // run dialog owns keys while open
     }
     if (e->type == KIAN_EV_MOUSE_BTN && IN->press_l) {
-        int w = 380, h = 130;
+        int w = 380, h = 150;
         int x = (GFX->w - w) / 2, y = (GFX->h - h) / 2;
         if (!rect_hit(IN->mx, IN->my, Rect{ x, y, w, h })) { SH->run_open = false; return true; }
         tbox_mouse(&SH->run_box, e);
@@ -267,8 +267,8 @@ static void draw_alttab(int cur_desk) {
         int iy = y + 24 + i * 30;
         bool sel = (i == iclamp(SH->alttab_sel, 0, n - 1));
         if (sel) fill_round_rect(x + 8, iy - 4, bw - 16, 28, 4, THEME->start_bg_active);
-        icon_draw(w->icon, x + 16, iy, 16, THEME->accent);
-        draw_text(x + 40, iy + 4, w->title, sel ? 0x00FFFFFF : THEME->text, 1);
+        icon_draw(w->icon, x + 16, iy + 2, 16, THEME->accent);
+        draw_text(x + 40, text_center_y(iy - 4, 28, 1), w->title, sel ? 0x00FFFFFF : THEME->text, 1);
     }
 }
 
@@ -314,7 +314,7 @@ static bool shell_key(const kian_event_t *e) {
     // Win+R -> Run
     if (win && (b == 'r' || b == 'R')) {
         SH->run_open = true;
-        tbox_init(&SH->run_box, 0, 0, 340, 28, false);
+        tbox_init(&SH->run_box, 0, 0, 340, 30, false);
         tbox_focus(&SH->run_box, true);
         return true;
     }

@@ -11,6 +11,8 @@
 
 enum { NDLG_NONE = 0, NDLG_OPEN, NDLG_SAVEAS };
 
+static const int NOTE_COLS_MAX = 110;   // max rendered chars per editor line
+
 struct NoteApp {
     Str text;          // content with '\n'
     int caret;
@@ -166,23 +168,24 @@ void notes_draw(void *inst, Rect r) {
     static const char *tb[4] = { "New", "Open", "Save", "Save As" };
     int tx = r.x + 6;
     for (int i = 0; i < 4; i++) {
-        int bw = text_width(tb[i], 1) + 14;
-        bool hov = mouse_in(tx, r.y + 4, bw, 20);
-        fill_round_rect(tx, r.y + 4, bw, 20, 4, hov ? THEME->start_bg_active : THEME->button_bg);
-        draw_text(tx + 7, r.y + 10, tb[i], THEME->button_fg, 1);
+        int bw = text_width(tb[i], 1) + 16;
+        bool hov = mouse_in(tx, r.y + 4, bw, 26);
+        fill_round_rect(tx, r.y + 4, bw, 26, 4, hov ? THEME->start_bg_active : THEME->button_bg);
+        draw_text(tx + 8, text_center_y(r.y + 4, 26, 1), tb[i], THEME->button_fg, 1);
         tx += bw + 4;
     }
     if (n->dirty) draw_text(r.x + r.w - 10, r.y + 10, "*", THEME->accent, 1);
 
     // text area
-    Rect area = { r.x + 4, r.y + 30, r.w - 16, r.h - 30 - 22 };
+    Rect area = { r.x + 4, r.y + 36, r.w - 16, r.h - 36 - 22 };
     fill_round_rect(area.x, area.y, area.w, area.h, 4, THEME->win_bg);
-    int lines_vis = area.h / 10;
+    int rowh = text_line_height_mono(1);          // 16
+    int lines_vis = imax(1, (area.h - 8) / rowh);
     int total = notes_count_lines(n);
     n->scroll = iclamp(n->scroll, 0, imax(0, total - lines_vis));
 
-    // draw visible lines + caret
-    char buf[160];
+    // draw visible lines + caret (mono editor like a real text editor)
+    char buf[NOTE_COLS_MAX + 2];
     int line = 0, start = 0, drawn = 0;
     int i = 0;
     for (i = 0; i <= n->text.length() && drawn < lines_vis; i++) {
@@ -190,10 +193,10 @@ void notes_draw(void *inst, Rect r) {
         if (nl) {
             if (line >= n->scroll) {
                 int len = i - start;
-                if (len > 150) len = 150;
+                if (len > NOTE_COLS_MAX) len = NOTE_COLS_MAX;
                 for (int k = 0; k < len; k++) buf[k] = n->text[start + k];
                 buf[len] = '\0';
-                draw_text(area.x + 4, area.y + 4 + drawn * 10, buf, THEME->text, 1);
+                draw_text_mono(area.x + 4, area.y + 4 + drawn * rowh, buf, THEME->text, 1);
                 drawn++;
             }
             line++;
@@ -204,15 +207,9 @@ void notes_draw(void *inst, Rect r) {
     int cl, cc;
     notes_line_col(n, &cl, &cc);
     if (cl >= n->scroll && cl < n->scroll + lines_vis) {
-        int s, e2;
-        notes_line_bounds(n, cl, &s, &e2);
-        int len = e2 - s;
-        if (len > 150) len = 150;
-        for (int k = 0; k < len; k++) buf[k] = n->text[s + k];
-        buf[len] = '\0';
-        int cx2 = area.x + 4 + text_width_n(buf, cc, 1);
-        int cy2 = area.y + 4 + (cl - n->scroll) * 10;
-        if (((now_ms() / 400) & 1) == 0) vline(cx2 + 1, cy2, 9, THEME->accent);
+        int cy2 = area.y + 4 + (cl - n->scroll) * rowh;
+        int cx2 = area.x + 4 + cc * glyph_advance_mono(1);
+        if (((now_ms() / 400) & 1) == 0) vline(cx2 + 1, mono_caret_y(cy2), mono_caret_h(), THEME->accent);
     }
     // mini scrollbar
     if (total > lines_vis) {
@@ -255,7 +252,7 @@ void notes_draw(void *inst, Rect r) {
     for (; *p3 != '\0' && k < 120; p3++) st[k++] = *p3;
     st[k] = '\0';
     fill_rect(r.x, r.y + r.h - 20, r.w, 20, THEME->icon_bg);
-    draw_text(r.x + 8, r.y + r.h - 16, st, THEME->text_dim, 1);
+    draw_text(r.x + 8, text_center_y(r.y + r.h - 20, 20, 1), st, THEME->text_dim, 1);
 }
 
 void notes_event(void *inst, const kian_event_t *e, Rect r) {
@@ -285,26 +282,21 @@ void notes_event(void *inst, const kian_event_t *e, Rect r) {
         static const char *tb[4] = { "New", "Open", "Save", "Save As" };
         int tx = r.x + 6;
         for (int i = 0; i < 4; i++) {
-            int bw = text_width(tb[i], 1) + 14;
-            if (mouse_in(tx, r.y + 4, bw, 20)) { notes_menu_cb(n, i + 1); return; }
+            int bw = text_width(tb[i], 1) + 16;
+            if (mouse_in(tx, r.y + 4, bw, 26)) { notes_menu_cb(n, i + 1); return; }
             tx += bw + 4;
         }
-        // caret placement by click
-        Rect area = { r.x + 4, r.y + 30, r.w - 16, r.h - 30 - 22 };
+        // caret placement by click (mono cell = 8 px)
+        Rect area = { r.x + 4, r.y + 36, r.w - 16, r.h - 36 - 22 };
         if (rect_hit(IN->mx, IN->my, area)) {
-            int target_line = n->scroll + (IN->my - area.y - 4) / 10;
+            int rowh = text_line_height_mono(1);
+            int target_line = n->scroll + (IN->my - area.y - 4) / rowh;
             target_line = iclamp(target_line, 0, notes_count_lines(n) - 1);
             int s, e2;
             notes_line_bounds(n, target_line, &s, &e2);
-            int col_px = IN->mx - area.x - 4;
-            int col = 0, px = 0;
-            for (int i2 = s; i2 < e2; i2++) {
-                int adv = glyph_advance(n->text[i2], 1);
-                if (px + adv / 2 > col_px) break;
-                px += adv;
-                col++;
-            }
-            n->caret = iclamp(s + col, s, e2);
+            int col = (IN->mx - area.x - 4) / glyph_advance_mono(1);
+            col = iclamp(col, 0, e2 - s);
+            n->caret = s + col;
         }
         return;
     }
@@ -355,7 +347,7 @@ void notes_event(void *inst, const kian_event_t *e, Rect r) {
     // keep the caret visible: scroll if it left the viewport
     int cl, cc;
     notes_line_col(n, &cl, &cc);
-    int lines_vis = (r.h - 52) / 10;
+    int lines_vis = imax(1, (r.h - 58) / text_line_height_mono(1));
     if (cl < n->scroll) n->scroll = cl;
     if (cl >= n->scroll + lines_vis) n->scroll = cl - lines_vis + 1;
 }

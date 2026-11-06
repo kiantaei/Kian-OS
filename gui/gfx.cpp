@@ -203,23 +203,32 @@ void shadow_rect(int x, int y, int w, int h) {
     blend_rect(x, y + 3, w, h + 2, 0x00000000, 52);
 }
 
+// ---------------- fonts ----------------
+// The GUI embeds its own bitmap fonts (gui/font.h, generated from real
+// TrueType fonts): a proportional UI font and an 8x16 mono font for the
+// terminal. The kernel's 8x8 console font stays untouched for ksh.
+
+#include "font.h"
+
 int glyph_advance(char c, int scale) {
-    // nicer spacing than a flat 8px grid (still monospace-friendly)
-    const char *narrow = " .,:;!'`|il";
-    const char *medium = "ftjr[]()-I";
-    if (c == '\0') return 0;
-    for (const char *p = narrow; *p; p++) if (*p == c) return 4 * scale;
-    for (const char *p = medium; *p; p++) if (*p == c) return 6 * scale;
-    return 8 * scale;
+    GlyphBits g;
+    if (c == '\0' || !font_glyph_ui(c, &g)) return 8 * scale;
+    return g.adv * scale;
 }
 
-static void draw_glyph(int x, int y, char ch, uint32_t c, int scale) {
-    const uint8_t *g = kian_font_glyph(ch);
-    if (g == 0) return;
-    for (int row = 0; row < 8; row++) {
-        uint8_t bits = g[row];
-        for (int col = 0; col < 8; col++) {
-            if (bits & (0x80u >> col)) {
+int glyph_advance_mono(int scale) { return FONT_MONO_CELL * scale; }
+int text_line_height_mono(int scale) { return FONT_MONO_ROWS * scale; }
+int mono_caret_y(int line_y) { return line_y + FONT_MONO_CAP_TOP - 1; }
+int mono_caret_h() { return FONT_MONO_ROWS - FONT_MONO_CAP_TOP - 2; }
+
+static void draw_glyph(int x, int y, char ch, uint32_t c, int scale, bool mono) {
+    GlyphBits g;
+    if (!(mono ? font_glyph_mono(ch, &g) : font_glyph_ui(ch, &g))) return;
+    for (int row = 0; row < g.rows; row++) {
+        uint16_t bits = (uint16_t)(((uint16_t)g.bits[row * 2] << 8) | g.bits[row * 2 + 1]);
+        if (bits == 0) continue;
+        for (int col = 0; col < g.w && col < 16; col++) {
+            if (bits & (0x8000u >> col)) {
                 if (scale == 1) {
                     gp(x + col, y + row, c);
                 } else {
@@ -236,7 +245,7 @@ void draw_text(int x, int y, const char *s, uint32_t c, int scale) {
     for (int i = 0; s[i] != '\0'; i++) {
         char ch = s[i];
         if (ch == '\n') { ox = x; y += text_line_height(scale); continue; }
-        draw_glyph(ox, y, ch, c, scale);
+        draw_glyph(ox, y, ch, c, scale, false);
         ox += glyph_advance(ch, scale);
     }
 }
@@ -244,6 +253,22 @@ void draw_text(int x, int y, const char *s, uint32_t c, int scale) {
 void draw_text_bold(int x, int y, const char *s, uint32_t c, int scale) {
     draw_text(x, y, s, c, scale);
     draw_text(x + scale, y, s, c, scale); // 1px offset -> bold look
+}
+
+void draw_text_mono(int x, int y, const char *s, uint32_t c, int scale) {
+    if (scale < 1) scale = 1;
+    int ox = x;
+    for (int i = 0; s[i] != '\0'; i++) {
+        char ch = s[i];
+        if (ch == '\n') { ox = x; y += text_line_height_mono(scale); continue; }
+        draw_glyph(ox, y, ch, c, scale, true);
+        ox += glyph_advance_mono(scale);
+    }
+}
+
+void draw_text_mono_bold(int x, int y, const char *s, uint32_t c, int scale) {
+    draw_text_mono(x, y, s, c, scale);
+    draw_text_mono(x + scale, y, s, c, scale);
 }
 
 int text_width(const char *s, int scale) {
@@ -260,8 +285,17 @@ int text_width_n(const char *s, int n, int scale) {
     return w;
 }
 
-int text_line_height(int scale) {
-    return 8 * scale + (scale > 1 ? 4 : 0);
+int text_width_mono(const char *s, int scale) {
+    int n = 0;
+    for (int i = 0; s[i] != '\0'; i++) n++;
+    return n * glyph_advance_mono(scale);
+}
+
+int text_line_height(int scale) { return (FONT_UI_ROWS + 2) * scale; }
+
+int text_center_y(int box_y, int box_h, int scale) {
+    int band = (FONT_UI_CAP_BOT - FONT_UI_CAP_TOP + 1) * scale;
+    return box_y + (box_h - band) / 2 - FONT_UI_CAP_TOP * scale;
 }
 
 bool rect_hit(int px, int py, const Rect &r) {
