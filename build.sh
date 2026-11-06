@@ -13,14 +13,20 @@ mkdir -p "$ISO_DIR/boot"
 echo "[Kian] Building kernel (target: x86_64-unknown-none)..."
 cargo +nightly build --release --manifest-path "$KERNEL_DIR/Cargo.toml"
 
-# Find the static library Cargo produced
-KERNEL_A=$(find "$ROOT/kernel/target/x86_64-unknown-none/release" -name "libkian_kernel.a" -o -name "libkian-kernel.a" 2>/dev/null | head -1)
+# Find the static library Cargo produced (show errors, don't suppress)
+KERNEL_A=$(find "$ROOT/kernel/target/x86_64-unknown-none/release" -name "libkian_kernel.a" -o -name "libkian-kernel.a" | head -1)
 if [ -z "$KERNEL_A" ]; then
-    echo "[Kian] ERROR: No static library found. Available files:"
-    ls -la "$ROOT/kernel/target/x86_64-unknown-none/release/" 2>/dev/null || true
+    echo "[Kian] ERROR: No static library found in release folder:"
+    ls -la "$ROOT/kernel/target/x86_64-unknown-none/release/" 2>&1 || true
     exit 1
 fi
 echo "[Kian] Using static library: $KERNEL_A"
+
+# Verify ld.lld exists
+if ! command -v ld.lld >/dev/null 2>&1; then
+    echo "[Kian] ERROR: ld.lld not found in PATH"
+    exit 1
+fi
 
 echo "[Kian] Linking kernel ELF (higher-half)..."
 ld.lld \
