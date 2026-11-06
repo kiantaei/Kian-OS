@@ -12,3 +12,5 @@ kian-os.iso.sha256
 # OS artifacts
 limine/
 vendor/
+# build working dir (limine clone + objects)
+build/

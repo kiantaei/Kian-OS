@@ -1,6 +1,6 @@
 // Kian OS - Settings App (C++, planned) - time zone settings incl. Asia/Tehran
-#include <stdio.h>
+#include <kian_abi.h>
 void settings_init(void) {
-    printf("[Settings] init (planned)\n");
-    printf("[Settings] Time zone: Asia/Tehran (UTC+03:30, no DST)\n");
+    kprintf("[Settings] init (planned)\n");
+    kprintf("[Settings] Time zone: Asia/Tehran (UTC+03:30, no DST)\n");
 }

@@ -1,3 +1,3 @@
 // Kian OS - Terminal Emulator (C++, planned)
-#include <stdio.h>
-void terminal_init(void) { printf("[Terminal] init (planned)\n"); }
+#include <kian_abi.h>
+void terminal_init(void) { kprintf("[Terminal] init (planned)\n"); }

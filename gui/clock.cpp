@@ -1,8 +1,8 @@
 // Kian OS - Desktop Clock (Asia/Tehran)
-#include <stdio.h>
-#include <time.h>
+// freestanding: hosted <stdio.h>/<time.h> are NOT available in the kernel build.
+#include <kian_abi.h>
 void clock_tick(void) {
-    time_t now = time(NULL) + (3*3600 + 30*60);
-    struct tm *lt = gmtime(&now);
-    printf("[Clock] %02d:%02d:%02d Asia/Tehran (UTC+03:30)\n", lt->tm_hour, lt->tm_min, lt->tm_sec);
+    kian_time_t t;
+    kian_time_now(&t); /* CMOS RTC (UTC) + fixed +03:30 = Asia/Tehran, no DST */
+    kprintf("[Clock] %02d:%02d:%02d Asia/Tehran (UTC+03:30)\n", t.hour, t.minute, t.second);
 }

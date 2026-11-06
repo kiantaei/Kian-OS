@@ -1,6 +1,7 @@
 // Kian OS - GUI/display abstraction headers (planned)
 #ifndef KIAN_GUI_DISPLAY_H
 #define KIAN_GUI_DISPLAY_H
+#include <stdint.h> /* uint32_t - do not rely on include order */
 #ifdef __cplusplus
 extern "C" {
 #endif
