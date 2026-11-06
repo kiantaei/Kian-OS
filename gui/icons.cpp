@@ -256,6 +256,89 @@ static void draw_grid(int x, int y, int s, uint32_t c) {
     rect_outline(x + q + 3, y + q + 3, q, q, c);
 }
 
+// Xenox logo: bold ring with an X inside (drawn in code only).
+static void draw_xenox(int x, int y, int s, uint32_t c) {
+    int cx = x + s / 2, cy = y + s / 2;
+    int r = s / 2 - 1;
+    for (int t = 0; t < 2; t++) {
+        for (int dy = -(r - t); dy <= (r - t); dy++) {
+            for (int dx = -(r - t); dx <= (r - t); dx++) {
+                int dd = dx * dx + dy * dy;
+                if (dd > (r - t) * (r - t) || dd < (r - t - 1) * (r - t - 1)) continue;
+                gp(cx + dx, cy + dy, c);
+            }
+        }
+    }
+    int xr = r - 4;
+    if (xr < 2) xr = 2;
+    line(cx - xr, cy - xr, cx + xr, cy + xr, c);
+    line(cx - xr + 1, cy - xr, cx + xr + 1, cy + xr, c);
+    line(cx + xr, cy - xr, cx - xr, cy + xr, c);
+    line(cx + xr - 1, cy - xr, cx - xr - 1, cy + xr, c);
+}
+
+static void draw_forward(int x, int y, int s, uint32_t c) {
+    line(x + s / 3, y + 2, x + s * 2 / 3, y + s / 2, c);
+    line(x + s * 2 / 3, y + s / 2, x + s / 3, y + s - 2, c);
+}
+
+static void draw_reload(int x, int y, int s, uint32_t c) {
+    int cx = x + s / 2, cy = y + s / 2, r = s / 2 - 3;
+    // ring with a gap at the top-right, plus an arrowhead into the gap
+    for (int dy = -r; dy <= r; dy++) {
+        for (int dx = -r; dx <= r; dx++) {
+            int dd = dx * dx + dy * dy;
+            if (dd > r * r || dd < (r - 1) * (r - 1)) continue;
+            if (dx > r / 2 && dy < -r / 2) continue; // gap
+            gp(cx + dx, cy + dy, c);
+        }
+    }
+    fill_rect(cx + r - 3, cy - r - 1, 4, 4, c);
+    fill_rect(cx + r - 1, cy - r + 1, 3, 3, c);
+}
+
+static void draw_home(int x, int y, int s, uint32_t c) {
+    // roof: two slanted thick bars
+    line(x + 1, y + s / 2, x + s / 2, y + 1, c);
+    line(x + 1 + 1, y + s / 2, x + s / 2 + 1, y + 1, c);
+    line(x + s / 2, y + 1, x + s - 2, y + s / 2, c);
+    line(x + s / 2, y + 1, x + s - 1, y + s / 2, c);
+    fill_rect(x + s / 4, y + s / 2, s / 2, s / 2 - 2, c);
+}
+
+static void draw_lock(int x, int y, int s, uint32_t c) {
+    int bw = s * 3 / 5, bx = x + (s - bw) / 2;
+    int by = y + s / 2;
+    int r = bw / 2;
+    int cx = x + s / 2;
+    for (int dy = -r; dy <= 0; dy++) {
+        for (int dx = -r; dx <= r; dx++) {
+            int dd = dx * dx + dy * dy;
+            if (dd <= r * r && dd >= (r - 2) * (r - 2)) gp(cx + dx, by + dy, c);
+        }
+    }
+    fill_rect(bx, by - 1, bw, s / 2, c);
+}
+
+static void draw_dots(int x, int y, int s, uint32_t c) {
+    fill_circle(x + s / 2, y + s / 5, 2, c);
+    fill_circle(x + s / 2, y + s / 2, 2, c);
+    fill_circle(x + s / 2, y + s * 4 / 5, 2, c);
+}
+
+static void draw_clock(int x, int y, int s, uint32_t c) {
+    circle_outline(x + s / 2, y + s / 2, s / 2 - 1, c);
+    line(x + s / 2, y + s / 3, x + s / 2, y + s / 2, c);
+    line(x + s / 2, y + s / 2, x + s * 2 / 3, y + s * 2 / 3, c);
+}
+
+static void draw_download(int x, int y, int s, uint32_t c) {
+    line(x + s / 2, y + 2, x + s / 2, y + s * 2 / 3, c);
+    line(x + s / 3, y + s / 2, x + s / 2, y + s * 2 / 3, c);
+    line(x + s / 2, y + s * 2 / 3, x + s * 2 / 3, y + s / 2, c);
+    hline(x + 2, y + s - 2, s - 4, c);
+}
+
 void icon_draw(int id, int x, int y, int size, uint32_t color) {
     if (size <= 0) return;
     switch (id) {
@@ -289,6 +372,15 @@ void icon_draw(int id, int x, int y, int size, uint32_t color) {
     case IC_CHECK:    draw_check(x, y, size, color); break;
     case IC_BOOKMARK: draw_bookmark(x, y, size, color); break;
     case IC_GRID:     draw_grid(x, y, size, color); break;
+    case IC_XENOX:    draw_xenox(x, y, size, color); break;
+    case IC_FORWARD:  draw_forward(x, y, size, color); break;
+    case IC_RELOAD:   draw_reload(x, y, size, color); break;
+    case IC_HOME:     draw_home(x, y, size, color); break;
+    case IC_LOCK:     draw_lock(x, y, size, color); break;
+    case IC_DOTS:     draw_dots(x, y, size, color); break;
+    case IC_CLOCK:    draw_clock(x, y, size, color); break;
+    case IC_DOWNLOAD: draw_download(x, y, size, color); break;
+    case IC_HISTORY:  draw_clock(x, y, size, color); break;
     default: break;
     }
 }

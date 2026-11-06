@@ -64,9 +64,63 @@ In VMware: boot the ISO, watch the serial console (COM1, 115200 8N1) or the scre
 | G4 window manager: 32-window pool, drag, resize (8px), snap with preview, min/max/close, focus ring, Alt+Tab | **Fully working** (open animation = fade only) |
 | G5 desktop: wallpapers, desktop icons, 48px acrylic taskbar, start menu with search filter, quick settings, calendar flyout, toasts, task view, 2 virtual desktops | **Fully working** (task-view thumbnails are simplified previews, not real content) |
 | G6 login/lock screen: big clock, avatar, password box, shake on wrong password, Win+L / Ctrl+Alt+L | **Fully working** (GUI_REQUIRES_LOGIN=false: no double login) |
-| G7 apps: Terminal (caret editing, Up/Down history, **TAB completion** — `ls desk` + TAB → `ls Desktop/`, TAB TAB lists candidates), Files, Notepad, Calculator (fixed decimal entry), Settings, Task Manager, Paint, Browser (placeholder), Run dialog | **Fully working**; RAM fs is volatile (stated in UI + README); Browser is an honest placeholder |
-| G7.5 fonts: embedded proportional UI font (Liberation Sans 16px) + 8x16 mono terminal font, generated offline by `tools/gen_font.py` into `gui/font.cpp` | **Fully working** (bitmap tables verified in host-rendered previews) |
-| G8 polish: Win+D, Win+Arrow snap, Ctrl+Alt+Del screen, tooltips, dirty-rect redraw, idle spin | **Fully working** |
+| G7 apps: Terminal (**Kian Terminal** — caret editing, Up/Down history, **TAB completion** — `ls desk` + TAB → `ls Desktop/`, TAB TAB lists candidates, Ctrl+C → `^C`, pipes + redirection, nano, mini-python, neofetch), Files, Notepad, Calculator (fixed decimal entry), Settings, Task Manager, Paint, Run dialog | **Fully working**; RAM fs is volatile (stated in UI + README) |
+| G7.5 fonts: embedded proportional UI font (Liberation Sans 16px) + 8x16 mono terminal font, generated offline by `tools/gen_font.py` into `gui/font.cpp`; inline colored emoji set (`gui/emoji.cpp`, escape `\x01`+id) | **Fully working** (bitmap tables verified in host-rendered previews) |
+| G8 polish: Win+D, Win+Arrow snap, Ctrl+Alt+Del screen, tooltips, dirty-rect redraw, idle spin, **taskbar with real window buttons** (click = focus/minimize, right-click = Restore/Minimize/Maximize/Close) | **Fully working** |
 | G9 VMware absolute mouse (backdoor 0x5658) | **Not done** (PS/2 relative mouse + 2x accel) |
 | ksh `passwd` change | **Partly working** (stub) |
 | `kian_uptime_ms` calibration | **Partly working** (TSC @ ~2GHz fallback; PIT calibration pending) |
+
+## Application registry (single source of truth)
+
+| Display Name | Internal ID | Run-dialog / terminal command |
+|---|---|---|
+| Xenox Browser | `xenox` | `xenox` |
+| Kian Terminal | `terminal` | `terminal` |
+| File Manager | `explorer` | `explorer` |
+| Notepad | `notepad` | `notepad` |
+| Calculator | `calculator` | `calculator` |
+| Settings | `settings` | `settings` |
+| Task Manager | `task_manager` | `taskmgr` |
+| Paint | `paint` | `paint` |
+
+Registered in: Start menu tiles, taskbar pins, window buttons, Run dialog, Task View, desktop icons and the terminal command registry.
+
+## Xenox Browser
+
+**Xenox** (`gui/apps/xenox.h`, `gui/apps/xenox.cpp`) replaces the old Kian Browser placeholder. It is a first-class app with a Chromium/Chrome-inspired interface drawn entirely by Kian OS code — no images, no faked websites.
+
+- **Architecture**: bounded tab pool (8 tabs) + per-tab back/forward stacks (8 entries each), a shared bounded history ring (16), a bounded bookmark pool (8) persisted to `/Documents/xenox-bookmarks.txt` in the **RAM filesystem**, an omnibox with history suggestions, and a small **native page renderer** for the built-in `xenox://` pages (`start`, `bookmarks`, `history`, `downloads`, `about`).
+- **Chromium compatibility status**: the *interface* is Chromium-inspired. The **Chromium engine is NOT ported** — Xenox never claims otherwise. A real Chromium port would need memory mapping, threads, synchronization, TCP/IP, TLS, a real filesystem and a hosted C++ runtime; the Kian kernel provides none of those yet. The status bar and About page state this explicitly.
+- **Tabs**: New tab (button, right-click menu, `Ctrl+T`), Close tab (per-tab X, `Ctrl+W`; closing the last tab closes the window), switch by click; tab titles follow the page title; the window title follows the active tab.
+- **Address bar (omnibox)**: type a `xenox://` page to open it; anything else goes to an **honest error page** — remote pages are never fabricated, and search queries get a "cannot search without networking" page (the query is echoed, no fake results). `Esc` cancels editing, `Ctrl+L` focuses the omnibox, suggestions come from real history/bookmarks.
+- **Bookmarks**: star button or `Ctrl+D` toggles a bookmark for the current page; the Bookmarks page lists, opens and removes them. **Bookmarks live in RAM and are lost on reboot** (stated in the UI).
+- **History**: only pages actually visited in this session; the History page opens entries and clears the list. `Ctrl+H`.
+- **Downloads**: the Downloads page (`Ctrl+J`) is an honest empty state — downloads need a network stack and real file storage, so **no fabricated progress is ever shown**.
+- **Networking limitation**: Kian OS has no network stack exposed to apps yet, so Xenox renders only its own local pages. When kernel networking lands, the renderer gains real fetches — no API is invented before that.
+
+## Kian Terminal
+
+**Kian Terminal** (`gui/apps/terminal*.cpp`, `terminal.h`) is a professional Linux-style terminal that runs **native Kian OS commands** over the RAM filesystem (Kian OS is not Linux — no Linux syscalls are assumed).
+
+- **Command interpreter**: a real bounded interpreter — tokenizer (double/single quotes, backslash escapes), `|` pipelines (max 4 stages, in-memory capture, documented), `< input`, `> output`, `>> append` on the RAM fs. Output is captured in a bounded 8 KB buffer between pipeline stages.
+- **Command registry**: function-pointer table in `terminal_commands.cpp` (no giant switch): `help, neofetch, ls, cd, pwd, cat, echo, mkdir, touch, rm, cp, mv, tree, grep, wc, history, clear, date, uptime, mem, whoami, hostname, uname, python, python3, g++, nano, xenox, terminal, explorer, notepad, calculator, settings, taskmgr, paint, reboot, shutdown, exit`. `reboot`/`shutdown` call the real kernel ABI; GUI-app commands raise the real windows.
+- **Filesystem integration**: everything runs against the RAM filesystem (`gui/ramfs.cpp`) — **volatile, lost on reboot**, and the terminal says so. Paths support `.`/`..` and `cd` with no args goes to `/home/kian`.
+- **Scrollback**: per-tab ring of 256 colored lines with wheel scrolling and a scrollbar; new output pages to the bottom.
+- **Tabs**: bounded pool of 4 with independent scrollback, history, cwd, input buffer and mode. `Ctrl+Shift+T` new tab, `Ctrl+Tab` next tab, `Ctrl+Shift+W` closes, X button per tab.
+- **History**: ring of 16 per tab; `Up`/`Down` walk it; `history` prints it.
+- **Shortcuts**: `Ctrl+C` → echoes the prompt+line and types `^C` (also aborts python REPL), `Ctrl+L` clear, `Ctrl+U` kill line, `Ctrl+A`/`Ctrl+E` home/end, Left/Right/Home/End/Del editing, `TAB` completion for commands and paths (`cd` completes dirs, `cat`/`nano` complete files, TAB TAB lists candidates).
+- **Prompt**: `kian@kian-os:~/Documents $` with username green, path blue, `$` in the accent color (dark **and** light theme palettes; `#0C0C0C` background in dark mode).
+
+## Preinstalled tools (initial software image)
+
+Bundled in the GUI itself — no download, no packages, nothing to install at boot:
+
+| Tool | Required command | Status |
+|---|---|---|
+| C++ compiler | `g++` | **Not done (honest)** — a native compiler needs an executable loader, processes, an assembler/linker and a C++ runtime that the kernel does not provide yet. `g++` prints exactly what is missing and never fakes output. |
+| Python interpreter | `python` / `python3` | **Real, limited interpreter** — "Kian mini-python": actually evaluates a documented Python subset (integers, strings, `if/elif/else`, `while`, `for`-in-`range()`, `def`+`return`, `print/len/str/int/abs/min/max`, `exit()`), REPL with `>>>`/`...` prompts and `python file.py` script mode. Integers only (no floats), no imports/lists/dicts/classes/input/stdlib — the banner and README say so; nothing pretends to be CPython. |
+| Nano editor | `nano` | **Real terminal editor** — full-screen buffer (128 lines × 120 cols), insert/delete/Enter/Backspace, arrows/Home/End/PgUp/PgDn, `^O` write, `^X` exit (asks on modified buffers), `^W` search, `^K`/`^U` cut/paste line, `^C` position, status bar + shortcut footer. Reads/writes the RAM fs. |
+| System information | `neofetch` | **Fully working** — Kian OS cat logo + only real values (resolution from the framebuffer, uptime/memory from the kernel ABI, real theme/accent). `neofetch --version` works. |
+
+Software manifest: all tools live inside the C++ GUI image (`gui/apps/`), target x86_64 freestanding C++17 with `-mgeneral-regs-only`, no runtime dependencies beyond `include/kian_abi.h`, and are compiled into the ISO by `build.sh`. Kian OS does not support loading native executables yet, so tools are registered terminal commands rather than separate programs — that limitation is stated here and in `help`.

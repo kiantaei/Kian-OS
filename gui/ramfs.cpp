@@ -238,6 +238,29 @@ bool ramfs_rename(RNode *n, const char *newname) {
     return true;
 }
 
+bool ramfs_move(RNode *n, RNode *newparent) {
+    if (!n || !newparent || newparent->type != RF_DIR) return false;
+    if (n == ROOT || n == TRASH || n->parent == 0) return false;
+    if (n->parent == newparent) return true;                   // nothing to do
+    if (ramfs_find(newparent, n->name)) return false;          // target exists
+    if (newparent->nchild >= 16) return false;                 // pool full
+    // cycle check: newparent must not be inside the subtree of n
+    for (RNode *a = newparent; a; a = a->parent) {
+        if (a == n) return false;
+    }
+    RNode *old = n->parent;
+    for (int i = 0; i < old->nchild; i++) {
+        if (old->children[i] == n) {
+            for (int j = i; j < old->nchild - 1; j++) old->children[j] = old->children[j + 1];
+            old->nchild--;
+            break;
+        }
+    }
+    n->parent = newparent;
+    newparent->children[newparent->nchild++] = n;
+    return true;
+}
+
 const char *ramfs_path(RNode *n, char *out, int max) {
     if (!n || !out || max < 2) return "";
     // build by walking up, then reverse

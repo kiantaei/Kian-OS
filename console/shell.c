@@ -29,7 +29,9 @@ static void print_banner(void) {
     kprintf("\n");
 }
 
-/* Reads one line. echo_star: print '*' instead of each typed char. */
+/* Reads one line. echo_star: print '*' instead of each typed char.
+ * Returns the length, or -1 if the line was cancelled with Ctrl+C
+ * (which echoes ^C like a real terminal). */
 static int read_line(char *buf, int max, int echo_star) {
     int len = 0;
     buf[0] = '\0';
@@ -42,6 +44,12 @@ static int read_line(char *buf, int max, int echo_star) {
         }
         if (ev.type != KIAN_EV_KEY_DOWN) continue;
         char c = (char)ev.b;
+        /* Ctrl+C cancels the line and echoes ^C (real terminal behavior) */
+        if ((ev.c & 2) != 0 && (c == 'c' || c == 'C')) {
+            kprintf("^C\n");
+            buf[0] = '\0';
+            return -1;
+        }
         if (c == '\n') {
             kprintf("\n");
             return len;
@@ -69,9 +77,9 @@ static void login(void) {
         for (int tries = 0; tries < 3; tries++) {
             char user[32], pass[32];
             kprintf("kian login: ");
-            read_line(user, sizeof(user), 0);
+            if (read_line(user, sizeof(user), 0) < 0) continue; /* ^C: new prompt */
             kprintf("Password: ");
-            read_line(pass, sizeof(pass), 1);
+            if (read_line(pass, sizeof(pass), 1) < 0) { kprintf("\n"); continue; }
             kprintf("\n");
             if (kian_auth_check(user, pass)) {
                 for (int i = 0; i < 31 && user[i] != '\0'; i++) CUR_USER[i] = user[i];
@@ -173,7 +181,7 @@ void kian_shell_main(void) {
     char line[160];
     for (;;) {
         kprintf("kian@kian-os:~$ ");
-        read_line(line, sizeof(line), 0);
+        if (read_line(line, sizeof(line), 0) < 0) continue; /* ^C: cancel line */
         dispatch(line);
     }
 }

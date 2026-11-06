@@ -40,6 +40,7 @@ const DRAIN_MAX: usize = 32; // kian_poll_event NEVER blocks; drains at most 32 
 static mut INITED: bool = false;
 static mut MODS: i32 = 0; // 1=shift, 2=ctrl, 4=alt, 8=win
 static mut CAPS: bool = false;
+static mut CAPS_DOWN: bool = false; // guard: toggle once per physical press
 static mut EXT: bool = false; // E0 prefix pending
 static mut WHEEL_MODE: bool = false; // IntelliMouse 4-byte packets
 static mut MIDX: usize = 0;
@@ -235,7 +236,12 @@ unsafe fn kbd_byte(code: u8) {
             if release { MODS &= !8; } else { MODS |= 8; }
         }
         0x3A => {
-            if !release { CAPS = !CAPS; }
+            if !release && !CAPS_DOWN {
+                CAPS = !CAPS;
+                CAPS_DOWN = true;
+            } else if release {
+                CAPS_DOWN = false;
+            }
         }
         _ => {}
     }
@@ -266,6 +272,19 @@ unsafe fn kbd_byte(code: u8) {
             0x3B..=0x44 => (K_F1 + (real - 0x3B) as i32, 0), // F1..F10
             0x57 => (K_F1 + 10, 0),                          // F11
             0x58 => (K_F1 + 11, 0),                          // F12
+            /* Keypad digits/operators: NumLock-on keypad keys arrive WITHOUT
+             * the E0 prefix, while arrows/Home/End/etc. always carry E0.
+             * Shift/Caps apply nothing here (keypad has no case). */
+            0x47..=0x53 => {
+                let kp: u8 = match real {
+                    0x47 => b'7', 0x48 => b'8', 0x49 => b'9', 0x4A => b'-',
+                    0x4B => b'4', 0x4C => b'5', 0x4D => b'6', 0x4E => b'+',
+                    0x4F => b'1', 0x50 => b'2', 0x51 => b'3',
+                    0x52 => b'0', 0x53 => b'.',
+                    _ => 0,
+                };
+                (0, kp as i32)
+            }
             _ => (0, map_ascii(real, MODS & 1 != 0, CAPS) as i32),
         }
     };

@@ -22,22 +22,22 @@ static void slog(const char *s) {
 
 struct AppDef { const char *title; int icon; int w, h; };
 static const AppDef APPS[9] = {
-    { "", 0, 0, 0 },                                   // APP_NONE
-    { "Kian Browser", IC_BROWSER, 640, 460 },          // APP_BROWSER
-    { "Terminal", IC_TERMINAL, 560, 360 },             // APP_TERM
-    { "Files", IC_FILES, 640, 420 },                   // APP_FILES
-    { "Notepad", IC_NOTES, 520, 400 },                 // APP_NOTES
-    { "Settings", IC_SETTINGS, 620, 440 },             // APP_SETTINGS
-    { "Task Manager", IC_TASKMGR, 460, 440 },          // APP_TASKMGR
-    { "Calculator", IC_CALC, 264, 360 },               // APP_CALC
-    { "Paint", IC_PAINT, 560, 440 }                    // APP_PAINT
+    { "", 0, 0, 0 },                                 // APP_NONE
+    { "Xenox Browser", IC_XENOX, 720, 480 },         // APP_XENOX
+    { "Kian Terminal", IC_TERMINAL, 640, 420 },      // APP_TERM
+    { "File Manager", IC_FILES, 640, 420 },          // APP_FILES
+    { "Notepad", IC_NOTES, 520, 400 },               // APP_NOTES
+    { "Settings", IC_SETTINGS, 620, 440 },           // APP_SETTINGS
+    { "Task Manager", IC_TASKMGR, 460, 440 },        // APP_TASKMGR
+    { "Calculator", IC_CALC, 264, 360 },             // APP_CALC
+    { "Paint", IC_PAINT, 560, 440 }                  // APP_PAINT
 };
 
 static bool app_attach(Window *w, int app, const char *path) {
     switch (app) {
-    case APP_BROWSER:
-        w->inst = browser_create(); w->draw = browser_draw;
-        w->event = browser_event; w->destroy = browser_destroy;
+    case APP_XENOX:
+        w->inst = xenox_create(); w->draw = xenox_draw;
+        w->event = xenox_event; w->destroy = xenox_destroy;
         return w->inst != 0;
     case APP_TERM:
         w->inst = term_create(); w->draw = term_draw;
@@ -74,7 +74,6 @@ static bool app_attach(Window *w, int app, const char *path) {
 
 void app_open(int app) {
     if (app <= APP_NONE || app > APP_PAINT || !SH) return;
-    // single instance per app: raise the existing window (any desktop)
     for (int i = 0; i < WM_MAX_WINDOWS; i++) {
         Window *ex = &SH->wm.win[i];
         if (ex->used && ex->app == app) {
@@ -105,6 +104,17 @@ void app_open_path(int app, const char *path) {
         return;
     }
     shell_full_redraw();
+}
+
+void shell_set_title(const char *text) {
+    if (!SH || !text) return;
+    Window *fw = wm_focused(&SH->wm);
+    if (!fw) return;
+    int n = imin(31, (int)strlen(text));
+    for (int i = 0; i < n; i++) fw->title[i] = text[i];
+    fw->title[n] = '\0';
+    fw->dirty = true;
+    SH->taskbar_dirty = true;
 }
 
 void shell_full_redraw() { if (SH) SH->need_full = true; }
@@ -173,7 +183,7 @@ static void draw_run() {
     fill_round_rect(x, y, w, h, 8, THEME->menu_border);
     fill_round_rect(x + 1, y + 1, w - 2, h - 2, 8, THEME->menu_bg);
     draw_text_bold(x + 16, y + 12, "Run", THEME->text, 2);
-    draw_text(x + 16, y + 50, "Type a program name (terminal, files, notepad, calc...)", THEME->text_dim, 1);
+    draw_text(x + 16, y + 50, "Type a program name (xenox, terminal, explorer, taskmgr...)", THEME->text_dim, 1);
     SH->run_box.x = x + 16;
     SH->run_box.y = y + 72;
     SH->run_box.w = w - 32;
@@ -182,14 +192,14 @@ static void draw_run() {
 }
 
 static void run_launch(const char *name) {
-    if (strcmp(name, "terminal") == 0 || strcmp(name, "term") == 0 || strcmp(name, "ksh") == 0) app_open(APP_TERM);
-    else if (strcmp(name, "files") == 0 || strcmp(name, "explorer") == 0) app_open(APP_FILES);
+    if (strcmp(name, "xenox") == 0 || strcmp(name, "browser") == 0 || strcmp(name, "web") == 0) app_open(APP_XENOX);
+    else if (strcmp(name, "terminal") == 0 || strcmp(name, "term") == 0 || strcmp(name, "ksh") == 0) app_open(APP_TERM);
+    else if (strcmp(name, "explorer") == 0 || strcmp(name, "files") == 0) app_open(APP_FILES);
     else if (strcmp(name, "notepad") == 0 || strcmp(name, "edit") == 0) app_open(APP_NOTES);
     else if (strcmp(name, "calc") == 0 || strcmp(name, "calculator") == 0) app_open(APP_CALC);
     else if (strcmp(name, "settings") == 0) app_open(APP_SETTINGS);
-    else if (strcmp(name, "taskmgr") == 0 || strcmp(name, "task manager") == 0) app_open(APP_TASKMGR);
+    else if (strcmp(name, "taskmgr") == 0 || strcmp(name, "task_manager") == 0 || strcmp(name, "task manager") == 0) app_open(APP_TASKMGR);
     else if (strcmp(name, "paint") == 0) app_open(APP_PAINT);
-    else if (strcmp(name, "browser") == 0 || strcmp(name, "web") == 0) app_open(APP_BROWSER);
     else if (strcmp(name, "about") == 0) app_open(APP_SETTINGS);
     else shell_toast("Run: program not found");
 }
@@ -488,7 +498,7 @@ extern "C" int gui_main(const kian_fb_t *fb) {
     }
     slog("GUI: step G6 ok (login path)\n");
 
-    toast_show(&sh->desk, "Welcome kian");
+    toast_show(&sh->desk, "Welcome, kian! \x01\x22");   // heart emoji inline
     sh->running = true;
     sh->need_full = true;
     sh->taskbar_dirty = false;
@@ -524,11 +534,6 @@ extern "C" int gui_main(const kian_fb_t *fb) {
                 if (!consumed) consumed = wm_mouse(&sh->wm, &ev);
             }
 
-            if (!consumed && ev.type == KIAN_EV_KEY_DOWN && (ev.a == KIAN_KEY_ESC || ev.b == 27)) {
-                sh->running = false; // ESC exits the GUI (emergency exit #2)
-                break;
-            }
-
             if (!consumed) {
                 Window *fw = wm_focused(&sh->wm);
                 if (fw && fw->desk_id == sh->desk.cur_desk && fw->state != WS_MIN && fw->event) {
@@ -537,7 +542,16 @@ extern "C" int gui_main(const kian_fb_t *fb) {
                     fw->event(fw->inst, &ev, c2);
                     clip_reset();
                     fw->dirty = true;
+                    if (ev.type == KIAN_EV_KEY_DOWN && (ev.a == KIAN_KEY_ESC || ev.b == 27)) {
+                        consumed = true;   // the focused app handled ESC itself
+                    }
                 }
+            }
+
+            // emergency exit #2: ESC only when nothing consumed it
+            if (!consumed && ev.type == KIAN_EV_KEY_DOWN && (ev.a == KIAN_KEY_ESC || ev.b == 27)) {
+                sh->running = false;
+                break;
             }
 
             if (consumed) sh->need_full = true;

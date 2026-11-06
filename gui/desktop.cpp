@@ -7,12 +7,13 @@
 #include "apps.h"
 #include "ramfs.h"
 #include "gui.h"
+#include "emoji.h"
 
 static const int TB_H = 48;
 static const int PIN_N = 6;
-static const int PIN_APP[PIN_N] = { APP_BROWSER, APP_TERM, APP_FILES, APP_NOTES, APP_SETTINGS, APP_TASKMGR };
-static const int PIN_ICON[PIN_N] = { IC_BROWSER, IC_TERMINAL, IC_FILES, IC_NOTES, IC_SETTINGS, IC_TASKMGR };
-static const char *PIN_NAME[PIN_N] = { "Kian Browser", "Terminal", "File Manager", "Notepad", "Settings", "Task Manager" };
+static const int PIN_APP[PIN_N] = { APP_XENOX, APP_TERM, APP_FILES, APP_NOTES, APP_SETTINGS, APP_TASKMGR };
+static const int PIN_ICON[PIN_N] = { IC_XENOX, IC_TERMINAL, IC_FILES, IC_NOTES, IC_SETTINGS, IC_TASKMGR };
+static const char *PIN_NAME[PIN_N] = { "Xenox Browser", "Kian Terminal", "File Manager", "Notepad", "Settings", "Task Manager" };
 
 // ---------------- theme ----------------
 
@@ -188,15 +189,89 @@ bool desk_event(Desktop *d, const kian_event_t *e) {
 
 // ---------------- taskbar ----------------
 
-static Rect tb_start_rect() { Rect r = { 4, 0, 44, TB_H }; return r; }
-static Rect tb_search_rect() { Rect r = { 54, 0, 200, TB_H }; return r; }
-static Rect tb_tv_rect() { Rect r = { 260, 0, 36, TB_H }; return r; }
-static Rect tb_pin_rect(int i) { Rect r = { 304 + i * 44, 0, 40, TB_H }; return r; }
+static const int WINBTN_MAX = 6;
 
-static Rect tb_clock_rect(int screen_w) { Rect r = { screen_w - 8 - 84, 0, 84, TB_H }; return r; }
+// ALL taskbar hit rects are anchored to the taskbar's real y (H-48).
+// (The old build tested rects at y=0..48, so no taskbar button ever
+// matched a real click - the taskbar looked completely dead.)
+static Rect tb_start_rect() { Rect r = { 4, GFX->h - TB_H, 44, TB_H }; return r; }
+static Rect tb_search_rect() { Rect r = { 54, GFX->h - TB_H, 200, TB_H }; return r; }
+static Rect tb_tv_rect() { Rect r = { 260, GFX->h - TB_H, 36, TB_H }; return r; }
+static Rect tb_pin_rect(int i) { Rect r = { 304 + i * 44, GFX->h - TB_H, 40, TB_H }; return r; }
+
+static int tb_winbtn_x0() { return 304 + PIN_N * 44 + 10; }
+
+static int winbtn_width(Window *w) {
+    int tw = text_width(w->title, 1);
+    int wd = 16 + 6 + imin(tw, 110) + 12;
+    if (wd < 84) wd = 84;
+    if (wd > 164) wd = 164;
+    return wd;
+}
+
+// open windows on the current desk, z-order (top first)
+static int winbtn_list(Desktop *d, int *ids) {
+    int n = 0;
+    for (int i = d->wm->order_n - 1; i >= 0 && n < 32; i--) {
+        Window *w = &d->wm->win[d->wm->order[i]];
+        if (w->used && w->desk_id == d->cur_desk) ids[n++] = w->id;
+    }
+    return n;
+}
+
+// how many buttons fit between the pins and the tray zone
+static int winbtn_fit(Desktop *d, int screen_w) {
+    int ids[32];
+    int n = winbtn_list(d, ids);
+    int avail = (screen_w - 8 - 84 - 6 - 150 - 8) - tb_winbtn_x0();
+    int used = 0, fit = 0;
+    for (int i = 0; i < n && i < WINBTN_MAX; i++) {
+        Window *w = wm_get(d->wm, ids[i]);
+        if (!w) continue;
+        int wd = winbtn_width(w) + 4;
+        if (used + wd > avail) break;
+        used += wd;
+        fit++;
+    }
+    return fit;
+}
+
+static Rect tb_winbtn_rect(Desktop *d, int i, int screen_w) {
+    int ids[32];
+    int n = winbtn_list(d, ids);
+    int x = tb_winbtn_x0();
+    for (int k = 0; k < n && k < WINBTN_MAX; k++) {
+        Window *w = wm_get(d->wm, ids[k]);
+        if (!w) continue;
+        int wd = winbtn_width(w) + 4;
+        if (k == i) { Rect r = { x, GFX->h - TB_H, wd, TB_H }; return r; }
+        x += wd;
+    }
+    Rect r = { 0, 0, 0, 0 };
+    (void)screen_w;
+    return r;
+}
+
+// the "+N more" chip after the last fitting button (0 size when unused)
+static Rect tb_overflow_rect(Desktop *d, int screen_w) {
+    int fit = winbtn_fit(d, screen_w);
+    int ids[32];
+    int n = winbtn_list(d, ids);
+    if (n <= fit) { Rect r = { 0, 0, 0, 0 }; return r; }
+    int x = tb_winbtn_x0();
+    for (int k = 0; k < fit; k++) {
+        Window *w = wm_get(d->wm, ids[k]);
+        if (!w) continue;
+        x += winbtn_width(w) + 4;
+    }
+    Rect r = { x, GFX->h - TB_H + 8, 44, TB_H - 16 };
+    return r;
+}
+
+static Rect tb_clock_rect(int screen_w) { Rect r = { screen_w - 8 - 84, GFX->h - TB_H, 84, TB_H }; return r; }
 static Rect tb_tray_rect(int screen_w) {
-    // everything between the last pin and the clock: treated as one hit zone
-    Rect r = { screen_w - 8 - 84 - 6 - 150, 0, 150, TB_H };
+    // everything between the last pin/button zone and the clock: one hit zone
+    Rect r = { screen_w - 8 - 84 - 6 - 150, GFX->h - TB_H, 150, TB_H };
     return r;
 }
 
@@ -244,35 +319,36 @@ static Window *pin_active(Desktop *d, int app) {
 void taskbar_draw(Desktop *d) {
     if (!GFX) return;
     int W = GFX->w, H = GFX->h;
+    int tby = H - TB_H;
     // acrylic: blend the taskbar color over what is behind it
-    blend_rect(0, H - TB_H, W, TB_H, THEME->taskbar_bg, 200);
-    hline(0, H - TB_H, W, THEME->menu_border);
+    blend_rect(0, tby, W, TB_H, THEME->taskbar_bg, 200);
+    hline(0, tby, W, THEME->menu_border);
 
     uint32_t fg = THEME->taskbar_fg;
     // start button
     Rect sr = tb_start_rect();
-    bool sh = mouse_in(sr.x, H - TB_H, sr.w, TB_H);
-    if (sh) fill_round_rect(sr.x + 2, H - TB_H + 6, sr.w - 4, TB_H - 12, 6, THEME->start_bg_active);
-    icon_draw(IC_START, sr.x + 10, H - TB_H + 12, 24, THEME->accent);
+    bool sh = mouse_in(sr.x, tby, sr.w, TB_H);
+    if (sh) fill_round_rect(sr.x + 2, tby + 6, sr.w - 4, TB_H - 12, 6, THEME->start_bg_active);
+    icon_draw(IC_START, sr.x + 10, tby + 12, 24, THEME->accent);
 
     // search box
     Rect se = tb_search_rect();
-    fill_round_rect(se.x, H - TB_H + 8, se.w, 32, 16, THEME->input_bg);
-    icon_draw(IC_SEARCH, se.x + 10, H - TB_H + 14, 16, THEME->text_dim);
-    draw_text(se.x + 32, text_center_y(H - TB_H + 8, 32, 1), "Search", THEME->text_dim, 1);
+    fill_round_rect(se.x, tby + 8, se.w, 32, 16, THEME->input_bg);
+    icon_draw(IC_SEARCH, se.x + 10, tby + 14, 16, THEME->text_dim);
+    draw_text(se.x + 32, text_center_y(tby + 8, 32, 1), "Search", THEME->text_dim, 1);
 
     // task view button
     Rect tv = tb_tv_rect();
-    bool tvh = mouse_in(tv.x, H - TB_H, tv.w, TB_H);
-    if (tvh) fill_round_rect(tv.x + 2, H - TB_H + 6, tv.w - 4, TB_H - 12, 6, THEME->start_bg_active);
-    icon_draw(IC_TASKVIEW, tv.x + 6, H - TB_H + 12, 24, fg);
+    bool tvh = mouse_in(tv.x, tby, tv.w, TB_H);
+    if (tvh) fill_round_rect(tv.x + 2, tby + 6, tv.w - 4, TB_H - 12, 6, THEME->start_bg_active);
+    icon_draw(IC_TASKVIEW, tv.x + 6, tby + 12, 24, fg);
 
     // pinned apps
     for (int i = 0; i < PIN_N; i++) {
         Rect pr = tb_pin_rect(i);
-        bool hov = mouse_in(pr.x, H - TB_H, pr.w, TB_H);
-        if (hov) fill_round_rect(pr.x + 2, H - TB_H + 4, pr.w - 4, TB_H - 8, 6, THEME->start_bg_active);
-        icon_draw(PIN_ICON[i], pr.x + 8, H - TB_H + 12, 24, fg);
+        bool hov = mouse_in(pr.x, tby, pr.w, TB_H);
+        if (hov) fill_round_rect(pr.x + 2, tby + 4, pr.w - 4, TB_H - 8, 6, THEME->start_bg_active);
+        icon_draw(PIN_ICON[i], pr.x + 8, tby + 12, 24, fg);
         bool running = pin_running(d, PIN_APP[i]);
         Window *act = pin_active(d, PIN_APP[i]);
         int ux = pr.x + 14, uw = 12;
@@ -280,18 +356,55 @@ void taskbar_draw(Desktop *d) {
         if (running || act) hline(ux, H - 5, uw, act ? THEME->accent : THEME->text_dim);
     }
 
-    // tray: chev, sync, ENG/FA, wifi, speaker, battery
+    // real window buttons (one per open window, z-order)
+    int ids[32];
+    int nwin = winbtn_list(d, ids);
+    int fit = winbtn_fit(d, W);
+    for (int i = 0; i < nwin && i < fit; i++) {
+        Window *w = wm_get(d->wm, ids[i]);
+        if (!w) continue;
+        Rect br = tb_winbtn_rect(d, i, W);
+        bool hov = mouse_in(br.x + 2, tby + 4, br.w - 4, TB_H - 8);
+        bool act = (d->wm->focused == w->id && w->state != WS_MIN);
+        if (act || hov) fill_round_rect(br.x + 2, tby + 4, br.w - 4, TB_H - 8, 6, act ? THEME->start_bg_active : (hov ? THEME->button_bg : 0));
+        icon_draw(w->icon, br.x + 8, tby + 14, 20, act ? THEME->accent : THEME->text_dim);
+        // title (truncated)
+        char lbl[40];
+        int k = 0;
+        for (; w->title[k] != '\0' && k < 38; k++) lbl[k] = w->title[k];
+        lbl[k] = '\0';
+        while (k > 0 && text_width(lbl, 1) > br.w - 34) { lbl[--k] = '\0'; }
+        draw_text(br.x + 32, text_center_y(tby, TB_H, 1), lbl, act ? THEME->taskbar_fg : THEME->text_dim, 1);
+        if (act) hline(br.x + 6, H - 4, br.w - 12, THEME->accent);
+        else if (w->state == WS_MIN) hline(br.x + 10, H - 4, br.w - 20, THEME->text_dim);
+    }
+    // "+N more" overflow chip -> opens Task View
+    if (nwin > fit) {
+        Rect or2 = tb_overflow_rect(d, W);
+        if (or2.w > 0) {
+            bool hov = mouse_in(or2.x, or2.y, or2.w, or2.h);
+            fill_round_rect(or2.x, or2.y, or2.w, or2.h, 6, hov ? THEME->start_bg_active : THEME->button_bg);
+            char more[16];
+            int k = 0;
+            more[k++] = '+';
+            put_num(more, k, nwin - fit);
+            more[k] = '\0';
+            draw_text(or2.x + (or2.w - text_width(more, 1)) / 2, text_center_y(or2.y, or2.h, 1), more, THEME->text_dim, 1);
+        }
+    }
+
+    // tray: battery, speaker, wifi, ENG/FA, sync, chevron
     int x = W - 8 - 84 - 6;
-    x -= 24; icon_draw(IC_BATTERY, x + 4, H - TB_H + 15, 18, fg);
-    x -= 24; icon_draw(IC_SPEAKER, x + 3, H - TB_H + 15, 18, fg);
-    x -= 24; icon_draw(IC_WIFI, x + 3, H - TB_H + 15, 18, fg);
+    x -= 24; icon_draw(IC_BATTERY, x + 4, tby + 15, 18, fg);
+    x -= 24; icon_draw(IC_SPEAKER, x + 3, tby + 15, 18, fg);
+    x -= 24; icon_draw(IC_WIFI, x + 3, tby + 15, 18, fg);
     x -= 6;
     const char *lang = d->lang_fa ? "FA" : "ENG";
     int lw = text_width(lang, 1);
     x -= lw + 4;
-    draw_text(x + 2, text_center_y(H - TB_H, TB_H, 1), lang, fg, 1);
-    x -= 20; icon_draw(IC_SYNC, x, H - TB_H + 15, 18, fg);
-    x -= 16; icon_draw(IC_CHEVUP, x, H - TB_H + 15, 18, fg);
+    draw_text(x + 2, text_center_y(tby, TB_H, 1), lang, fg, 1);
+    x -= 20; icon_draw(IC_SYNC, x, tby + 15, 18, fg);
+    x -= 16; icon_draw(IC_CHEVUP, x, tby + 15, 18, fg);
 
     // clock (two lines)
     kian_time_t t;
@@ -299,15 +412,32 @@ void taskbar_draw(Desktop *d) {
     char l1[24], l2[24];
     fmt_clock(l1, sizeof(l1), t, d->clock24);
     fmt_date(l2, sizeof(l2), t);
-    draw_text(W - 8 - 76, H - TB_H + 6, l1, fg, 1);
-    draw_text(W - 8 - 76, H - TB_H + 23, l2, fg, 1);
+    draw_text(W - 8 - 76, tby + 6, l1, fg, 1);
+    draw_text(W - 8 - 76, tby + 23, l2, fg, 1);
 
     // tooltip after 600 ms hover
     if (d->tooltip_on && d->hover_btn >= 0 && mouse_idle_ms() >= 600 && IN->btns == 0) {
-        const char *name = (d->hover_btn == 0) ? "Start" : (d->hover_btn == 1) ? "Search"
-                         : (d->hover_btn == 2) ? "Task view" : PIN_NAME[d->hover_btn - 3];
-        int tooltip_y = H - TB_H - 30;
-        tooltip_draw(IN->mx + 8, tooltip_y, name);
+        const char *name = 0;
+        if (d->hover_btn == 0) name = "Start";
+        else if (d->hover_btn == 1) name = "Search";
+        else if (d->hover_btn == 2) name = "Task view";
+        else if (d->hover_btn < 3 + PIN_N) name = PIN_NAME[d->hover_btn - 3];
+        else {
+            int wi = d->hover_btn - 3 - PIN_N;
+            int fit2 = winbtn_fit(d, W);
+            if (wi >= 0 && wi < fit2) {
+                int ids2[32];
+                winbtn_list(d, ids2);
+                Window *w2 = wm_get(d->wm, ids2[wi]);
+                if (w2) name = w2->title;
+            } else {
+                name = "More windows";
+            }
+        }
+        if (name) {
+            int tooltip_y = H - TB_H - 30;
+            tooltip_draw(IN->mx + 8, tooltip_y, name);
+        }
     }
 }
 
@@ -315,6 +445,18 @@ static void pin_menu_cb(void *ud, int id) {
     int app = (int)(intptr_t)ud;
     if (id == 1) app_open(app);
     else if (id == 2 && SH) wm_close_app(&SH->wm, app);
+}
+
+// right-click menu for a window button
+static void winbtn_menu_cb(void *ud, int id) {
+    int win_id = (int)(intptr_t)ud;
+    if (!SH) return;
+    Window *w = wm_get(&SH->wm, win_id);
+    if (!w) return;
+    if (id == 1) { if (w->state == WS_MIN) w->state = WS_NORM; wm_focus(&SH->wm, w); shell_full_redraw(); }
+    else if (id == 2) { if (w->state != WS_MIN) { w->state = WS_MIN; SH->wm.focused = 0; shell_full_redraw(); } }
+    else if (id == 3) { wm_toggle_max(w, GFX->w, GFX->h); shell_full_redraw(); }
+    else if (id == 4) { wm_close_id(&SH->wm, win_id); shell_full_redraw(); }
 }
 
 static void power_menu_cb(void *ud, int id) {
@@ -325,10 +467,33 @@ static void power_menu_cb(void *ud, int id) {
     else if (id == 4) d->exit_gui = true;
 }
 
+// hover-id encoding: 0 start, 1 search, 2 task view, 3..3+PIN_N-1 pins,
+// 3+PIN_N.. window buttons, 999 = overflow chip
+static int taskbar_hover_at(Desktop *d, int W) {
+    if (mouse_in(tb_start_rect().x, GFX->h - TB_H, tb_start_rect().w, TB_H)) return 0;
+    if (mouse_in(tb_search_rect().x, GFX->h - TB_H, tb_search_rect().w, TB_H)) return 1;
+    if (mouse_in(tb_tv_rect().x, GFX->h - TB_H, tb_tv_rect().w, TB_H)) return 2;
+    for (int i = 0; i < PIN_N; i++) {
+        Rect r = tb_pin_rect(i);
+        if (mouse_in(r.x, GFX->h - TB_H, r.w, TB_H)) return 3 + i;
+    }
+    int ids[32];
+    int nwin = winbtn_list(d, ids);
+    int fit = winbtn_fit(d, W);
+    for (int i = 0; i < nwin && i < fit; i++) {
+        Rect r = tb_winbtn_rect(d, i, W);
+        if (r.w > 0 && mouse_in(r.x, GFX->h - TB_H, r.w, TB_H)) return 3 + PIN_N + i;
+    }
+    Rect or2 = tb_overflow_rect(d, W);
+    if (or2.w > 0 && mouse_in(or2.x, or2.y, or2.w, or2.h)) return 999;
+    return -1;
+}
+
 bool taskbar_event(Desktop *d, const kian_event_t *e) {
     if (!GFX || !IN) return false;
     int W = GFX->w, H = GFX->h;
-    if (IN->my < H - TB_H) {
+    int tby = H - TB_H;
+    if (IN->my < tby) {
         // mouse left the taskbar: reset tooltip
         if (e->type == KIAN_EV_MOUSE_MOVE && d->hover_btn >= 0) {
             d->hover_btn = -1;
@@ -337,22 +502,14 @@ bool taskbar_event(Desktop *d, const kian_event_t *e) {
         return false;
     }
     if (e->type == KIAN_EV_MOUSE_MOVE) {
-        int hb = -1;
-        if (mouse_in(tb_start_rect().x, H - TB_H, tb_start_rect().w, TB_H)) hb = 0;
-        else if (mouse_in(tb_search_rect().x, H - TB_H, tb_search_rect().w, TB_H)) hb = 1;
-        else if (mouse_in(tb_tv_rect().x, H - TB_H, tb_tv_rect().w, TB_H)) hb = 2;
-        else {
-            for (int i = 0; i < PIN_N; i++) {
-                Rect r = tb_pin_rect(i);
-                if (mouse_in(r.x, H - TB_H, r.w, TB_H)) { hb = 3 + i; break; }
-            }
-        }
+        int hb = taskbar_hover_at(d, W);
         if (hb != d->hover_btn) {
             d->hover_btn = hb;
             d->hover_since = now_ms();
             d->tooltip_on = (hb >= 0);
+            SH->taskbar_dirty = true;   // repaint only the taskbar strip
         }
-        return true; // taskbar owns move events on itself (tooltip redraw)
+        return false;   // do NOT consume: keep the cheap cursor-move redraw
     }
     if (e->type == KIAN_EV_MOUSE_BTN && IN->press_l) {
         d->tooltip_on = false;
@@ -375,6 +532,7 @@ bool taskbar_event(Desktop *d, const kian_event_t *e) {
                 if (ex) {
                     if (act) {
                         ex->state = WS_MIN;      // click on active icon minimizes
+                        SH->wm.focused = 0;
                     } else {
                         if (ex->state == WS_MIN) ex->state = WS_NORM;
                         wm_focus(d->wm, ex);
@@ -385,6 +543,27 @@ bool taskbar_event(Desktop *d, const kian_event_t *e) {
                 return true;
             }
         }
+        // window buttons
+        int ids[32];
+        int nwin = winbtn_list(d, ids);
+        int fit = winbtn_fit(d, W);
+        for (int i = 0; i < nwin && i < fit; i++) {
+            Rect r = tb_winbtn_rect(d, i, W);
+            if (r.w > 0 && rect_hit(IN->mx, IN->my, r)) {
+                Window *w = wm_get(d->wm, ids[i]);
+                if (!w) return true;
+                if (d->wm->focused == w->id && w->state != WS_MIN) {
+                    w->state = WS_MIN;
+                    d->wm->focused = 0;
+                } else {
+                    if (w->state == WS_MIN) w->state = WS_NORM;
+                    wm_focus(d->wm, w);
+                }
+                return true;
+            }
+        }
+        Rect or2 = tb_overflow_rect(d, W);
+        if (or2.w > 0 && rect_hit(IN->mx, IN->my, or2)) { d->taskview = true; return true; }
         if (rect_hit(IN->mx, IN->my, tb_clock_rect(W))) { d->cal_open = !d->cal_open; d->quick_open = false; return true; }
         if (rect_hit(IN->mx, IN->my, tb_tray_rect(W))) { d->quick_open = !d->quick_open; d->cal_open = false; return true; }
         return true; // clicks on the empty taskbar are consumed
@@ -398,6 +577,20 @@ bool taskbar_event(Desktop *d, const kian_event_t *e) {
                 return true;
             }
         }
+        // right-click a window button: restore / minimize / maximize / close
+        int ids[32];
+        int nwin = winbtn_list(d, ids);
+        int fit = winbtn_fit(d, W);
+        for (int i = 0; i < nwin && i < fit; i++) {
+            Rect r = tb_winbtn_rect(d, i, W);
+            if (r.w > 0 && rect_hit(IN->mx, IN->my, r)) {
+                static const MenuItem items[4] = {
+                    { "Restore", 1 }, { "Minimize", 2 }, { "Maximize", 3 }, { "Close", 4 }
+                };
+                menu_open(&SH->menu, items, 4, winbtn_menu_cb, (void *)(intptr_t)ids[i], IN->mx, IN->my - 100);
+                return true;
+            }
+        }
         return true;
     }
     return false;
@@ -407,7 +600,7 @@ bool taskbar_event(Desktop *d, const kian_event_t *e) {
 
 struct TileDef { const char *name; int icon; int app; };
 static const TileDef TILES[8] = {
-    { "Browser", IC_BROWSER, APP_BROWSER },
+    { "Xenox", IC_XENOX, APP_XENOX },
     { "Terminal", IC_TERMINAL, APP_TERM },
     { "Files", IC_FILES, APP_FILES },
     { "Notepad", IC_NOTES, APP_NOTES },
@@ -477,6 +670,7 @@ void start_menu_draw(Desktop *d) {
 
     // pinned grid (filtered)
     draw_text_bold(p.x + 12, p.y + 54, "Pinned", THEME->text, 2);
+    emoji_draw(EMOJI_STAR, p.x + 12 + text_width("Pinned", 2) + 6, p.y + 56, 14);
     const char *q = tbox_text(&d->sbox);
     int tw = (p.w - 24) / 6;
     int shown = 0;

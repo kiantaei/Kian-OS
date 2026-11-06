@@ -5,7 +5,7 @@
 
 enum {
     APP_NONE = 0,
-    APP_BROWSER, APP_TERM, APP_FILES, APP_NOTES,
+    APP_XENOX, APP_TERM, APP_FILES, APP_NOTES,
     APP_SETTINGS, APP_TASKMGR, APP_CALC, APP_PAINT
 };
 
@@ -16,6 +16,7 @@ void shell_full_redraw();                        // request a full repaint
 void shell_mark_content();                       // mark focused window content dirty
 void shell_close_focused();                      // the focused window asks to close itself
 void shell_toast(const char *text);              // show a notification toast
+void shell_set_title(const char *text);          // rename the focused window (browser tabs)
 
 // uniform per-app interface (Rect = content rect). One struct per app file.
 void *term_create();
@@ -54,7 +55,7 @@ void   paint_destroy(void *inst);
 void   paint_draw(void *inst, Rect r);
 void   paint_event(void *inst, const kian_event_t *e, Rect r);
 
-void *browser_create();
-void   browser_destroy(void *inst);
-void   browser_draw(void *inst, Rect r);
-void   browser_event(void *inst, const kian_event_t *e, Rect r);
+void *xenox_create();
+void   xenox_destroy(void *inst);
+void   xenox_draw(void *inst, Rect r);
+void   xenox_event(void *inst, const kian_event_t *e, Rect r);

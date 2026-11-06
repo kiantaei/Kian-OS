@@ -32,5 +32,6 @@ int    ramfs_size(RNode *f);
 bool   ramfs_trash_node(RNode *n);                          // move into Trash
 bool   ramfs_delete(RNode *n);                              // really remove
 bool   ramfs_rename(RNode *n, const char *newname);
+bool   ramfs_move(RNode *n, RNode *newparent);          // reparent (no cycle)
 const char *ramfs_path(RNode *n, char *out, int max);       // absolute path
 bool   ramfs_is_dir(RNode *n);

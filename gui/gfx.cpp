@@ -2,6 +2,7 @@
 // compiler would reject float/double anyway). 16.16 fixed point where needed.
 #include "gfx.h"
 #include "util.h"
+#include "emoji.h"
 
 Gfx *GFX = 0;
 static Gfx g_state;          // POD, no constructor -> allowed as static storage
@@ -239,12 +240,44 @@ static void draw_glyph(int x, int y, char ch, uint32_t c, int scale, bool mono) 
     }
 }
 
+// Inline-emoji escape: '\x01' followed by an emoji id byte. Both text
+// renderers and all width functions honor it, so strings can carry emoji
+// anywhere (start menu, toasts, terminal, browser pages).
+static inline int text_advance_at(const char *s, int i, char ch, int scale, bool mono) {
+    if (ch == '\x01' && s[i + 1] != '\0') {
+        // inline emoji escape: '\x01' + (emoji id + 0x20) so the payload byte
+        // never collides with control characters like \n or \t
+        if (emoji_size_valid((unsigned char)s[i + 1] - 0x20)) {
+            return mono ? emoji_advance_mono(scale) : emoji_advance_ui(scale);
+        }
+    }
+    return mono ? glyph_advance_mono(scale) : glyph_advance(ch, scale);
+}
+
+static inline void text_draw_at(int x, int y, const char *s, int i, char ch, uint32_t c, int scale, bool mono) {
+    if (ch == '\x01' && s[i + 1] != '\0' && emoji_size_valid((unsigned char)s[i + 1] - 0x20)) {
+        int id = (unsigned char)s[i + 1] - 0x20;
+        int sz = mono ? emoji_size_mono(scale) : emoji_size_ui(scale);
+        int adv = mono ? emoji_advance_mono(scale) : emoji_advance_ui(scale);
+        int dy = mono ? (text_line_height_mono(scale) - sz) / 2 : 2 * scale;
+        emoji_draw(id, x + (adv - sz) / 2, y + dy, sz);
+        return;
+    }
+    draw_glyph(x, y, ch, c, scale, mono);
+}
+
 void draw_text(int x, int y, const char *s, uint32_t c, int scale) {
     if (scale < 1) scale = 1;
     int ox = x;
     for (int i = 0; s[i] != '\0'; i++) {
         char ch = s[i];
         if (ch == '\n') { ox = x; y += text_line_height(scale); continue; }
+        if (ch == '\x01' && s[i + 1] != '\0') {
+            text_draw_at(ox, y, s, i, ch, c, scale, false);
+            ox += emoji_advance_ui(scale);
+            i++;
+            continue;
+        }
         draw_glyph(ox, y, ch, c, scale, false);
         ox += glyph_advance(ch, scale);
     }
@@ -261,6 +294,12 @@ void draw_text_mono(int x, int y, const char *s, uint32_t c, int scale) {
     for (int i = 0; s[i] != '\0'; i++) {
         char ch = s[i];
         if (ch == '\n') { ox = x; y += text_line_height_mono(scale); continue; }
+        if (ch == '\x01' && s[i + 1] != '\0') {
+            text_draw_at(ox, y, s, i, ch, c, scale, true);
+            ox += emoji_advance_mono(scale);
+            i++;
+            continue;
+        }
         draw_glyph(ox, y, ch, c, scale, true);
         ox += glyph_advance_mono(scale);
     }
@@ -274,21 +313,30 @@ void draw_text_mono_bold(int x, int y, const char *s, uint32_t c, int scale) {
 int text_width(const char *s, int scale) {
     if (scale < 1) scale = 1;
     int w = 0;
-    for (int i = 0; s[i] != '\0'; i++) w += glyph_advance(s[i], scale);
+    for (int i = 0; s[i] != '\0'; i++) {
+        w += text_advance_at(s, i, s[i], scale, false);
+        if (s[i] == '\x01' && s[i + 1] != '\0') i++;
+    }
     return w;
 }
 
 int text_width_n(const char *s, int n, int scale) {
     if (scale < 1) scale = 1;
     int w = 0;
-    for (int i = 0; i < n && s[i] != '\0'; i++) w += glyph_advance(s[i], scale);
+    for (int i = 0; i < n && s[i] != '\0'; i++) {
+        w += text_advance_at(s, i, s[i], scale, false);
+        if (s[i] == '\x01' && s[i + 1] != '\0') i++;
+    }
     return w;
 }
 
 int text_width_mono(const char *s, int scale) {
     int n = 0;
-    for (int i = 0; s[i] != '\0'; i++) n++;
-    return n * glyph_advance_mono(scale);
+    for (int i = 0; s[i] != '\0'; i++) {
+        n += text_advance_at(s, i, s[i], scale, true);
+        if (s[i] == '\x01' && s[i + 1] != '\0') i++;
+    }
+    return n;
 }
 
 int text_line_height(int scale) { return (FONT_UI_ROWS + 2) * scale; }
