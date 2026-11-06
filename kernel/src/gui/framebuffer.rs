@@ -80,7 +80,7 @@ pub fn init() {
     // After Limine has filled the response, check if we got a framebuffer.
     let fb_resp = unsafe { FB_RESPONSE_PTR.as_ref() };
     match fb_resp {
-        Some(resp) if (*(*resp)).framebuffer_count > 0 => {
+        Some(resp) if unsafe { (*(*resp)).framebuffer_count > 0 } => {
             let fb_ptr = unsafe { (*(*resp)).framebuffers.as_ref() };
             if let Some(fb) = fb_ptr {
                 let fb: &LimineFramebuffer = unsafe { &**fb };
