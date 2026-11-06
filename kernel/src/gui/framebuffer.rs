@@ -83,7 +83,7 @@ pub fn init() {
         Some(resp) if (*(*resp)).framebuffer_count > 0 => {
             let fb_ptr = unsafe { (*(*resp)).framebuffers.as_ref() };
             if let Some(fb) = fb_ptr {
-                let fb = unsafe { &*fb };
+                let fb: &LimineFramebuffer = unsafe { &**fb };
                 let addr = fb.addr as *mut u32;
                 let width = fb.width as u32;
                 let height = fb.height as u32;
