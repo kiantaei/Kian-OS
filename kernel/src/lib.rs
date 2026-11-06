@@ -43,14 +43,13 @@ pub static BOOT_BANNER: &str = r#"
 pub extern "C" fn kernel_main() -> ! {
     // Early console + serial before anything else.
     console::early_init();
-    arch::serial::init();
 
     kprintln!("{}", BOOT_BANNER);
     kprintln!("[Kian] Kernel starting... (x86_64, higher-half)");
     kprintln!("[Kian] Boot time zone: Asia/Tehran (UTC+03:30, no DST)");
 
-    // Initialize architecture (GDT, IDT, paging).
-    arch::init();
+    // Initialize architecture (GDT, IDT, paging, serial, etc.).
+    arch::init_x86_64();
 
     // Memory manager: physical + virtual + heap.
     memory::init();

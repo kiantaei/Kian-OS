@@ -1,6 +1,7 @@
 use crate::scheduler;
 use crate::memory;
 use crate::kprintln;
+use alloc::vec::Vec;
 
 pub struct Process {
     pub pid: u32,
@@ -44,7 +45,7 @@ pub fn start_userspace() -> ! {
     kprintln!("[Kian] init spawned as pid {}", pid);
     // Wait forever (userspace runs on its own stack via scheduler)
     loop {
-        crate::arch::interrupts::init();
+        crate::arch::x86_64::interrupts::init();
         unsafe { core::arch::asm!("hlt"); }
     }
 }

@@ -17,9 +17,8 @@ pub fn handle_packet(src_ip: [u8; 4], dst_ip: [u8; 4], payload: &[u8]) {
     let flags = payload[13];
     let body = &payload[data_offset..payload.len().min(payload.len())];
 
-    kprintln!("[Kian] TCP {}:{} -> {}:{} seq={} ack={} flags=0x{:02x} body={}",
-        src_ip[0], src_ip[1], src_ip[2], src_ip[3],
-        src_port, dst_port, seq, ack, flags, body.len());
+    kprintln!("[Kian] TCP {}.{}.{}.{}:{} seq={} ack={} flags=0x{:02x} body={}",
+        src_ip[0], src_ip[1], src_ip[2], src_ip[3], src_port, seq, ack, flags, body.len());
 
     // Handle SYN -> SYN-ACK
     if flags & 0x02 != 0 {

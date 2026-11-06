@@ -1,4 +1,5 @@
 use crate::kprintln;
+use alloc::vec::Vec;
 use crate::net::ipv4;
 
 #[repr(C, packed)]
@@ -22,9 +23,8 @@ pub fn handle_packet(src_ip: [u8; 4], dst_ip: [u8; 4], payload: &[u8]) {
     let len = u16::from_be_bytes([payload[4], payload[5]]) as usize;
     let body = &payload[8..len.min(payload.len())];
 
-    kprintln!("[Kian] UDP packet {}:{} -> {}:{} len={}",
-        src_ip[0], src_ip[1], src_ip[2], src_ip[3],
-        src_port, dst_port, len);
+    kprintln!("[Kian] UDP packet {}.{}.{}.{} len={}",
+        src_ip[0], src_ip[1], src_ip[2], src_ip[3], len);
 
     match dst_port {
         68 => dhcp::handle_offer(body),

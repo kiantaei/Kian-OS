@@ -17,5 +17,4 @@ panic = "abort"
 [dependencies]
 spin = "0.9"
 x86_64 = "0.15"
-lazy_static = "1.4"
 volatile = "0.4"

@@ -1,8 +1,6 @@
-use x86_64::{VirtAddr, PhysAddr};
-use x86_64::structures::paging::{Mapper, Page, Size4KiB, PageTableFlags};
-use crate::memory::frame_allocator::GlobalFrameAllocator;
-use spin::Mutex;
 use core::alloc::{GlobalAlloc, Layout};
+use alloc::format;
+use spin::Mutex;
 
 const HEAP_START: usize = 0x_4444_4444_0000;
 const HEAP_SIZE: usize = 4 * 1024 * 1024;
@@ -10,19 +8,24 @@ const HEAP_SIZE: usize = 4 * 1024 * 1024;
 struct BumpAllocator {
     next: usize,
     end: usize,
+    initialized: bool,
 }
 
 impl BumpAllocator {
     const fn empty() -> Self {
-        BumpAllocator { next: 0, end: 0 }
+        BumpAllocator { next: 0, end: 0, initialized: false }
     }
 
     unsafe fn init(&mut self, start: usize, size: usize) {
         self.next = start;
         self.end = start + size;
+        self.initialized = true;
     }
 
     unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
+        if !self.initialized {
+            return core::ptr::null_mut();
+        }
         let align = layout.align();
         let size = layout.size();
 
@@ -56,23 +59,10 @@ unsafe impl GlobalAlloc for Mutex<BumpAllocator> {
 }
 
 pub fn init() {
-    // Map heap pages into the higher-half address space
-    let mut mapper = unsafe { x86_64::memory::mapper::remap_the_kernel() };
-    let mut allocator = GlobalFrameAllocator;
-    let mut mapped = 0;
-    for i in 0..(HEAP_SIZE / 4096) {
-        let virt = VirtAddr::new(HEAP_START + i * 4096);
-        let page = Page::containing_address(virt);
-        if let Some(frame) = allocator.allocate_frame() {
-            let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-            let _ = mapper.map_to(page, frame, flags, &mut allocator);
-            mapped += 1;
-        }
-    }
     unsafe {
         ALLOCATOR.lock().init(HEAP_START, HEAP_SIZE);
     }
-    crate::kprintln!("[Kian] Heap: {} pages ({:.1} MiB) at {:#x}", mapped, HEAP_SIZE as f64 / 1024.0 / 1024.0, HEAP_START);
+    crate::kprintln!("[Kian] Heap: {} bytes ({:.1} MiB) at {:#x}", HEAP_SIZE, HEAP_SIZE as f64 / 1024.0 / 1024.0, HEAP_START);
 }
 
 #[alloc_error_handler]

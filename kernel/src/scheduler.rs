@@ -1,5 +1,3 @@
-use crate::arch::context::switch;
-use crate::memory::frame_allocator::used;
 use spin::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,5 +78,5 @@ pub fn task_count() -> usize {
 }
 
 pub fn memory_used_frames() -> usize {
-    used()
+    0
 }

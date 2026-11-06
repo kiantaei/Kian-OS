@@ -1,4 +1,5 @@
 use crate::kprintln;
+use alloc::format;
 
 pub fn halt(message: &str) -> ! {
     crate::kprintln!("");
@@ -6,7 +7,7 @@ pub fn halt(message: &str) -> ! {
     crate::kprintln!(" KIAN OS KERNEL PANIC");
     crate::kprintln!("========================================");
     crate::kprintln!("{}", message);
-    crate::kprintln!("Version: 0.1.0 \"Genesis\"");
+    crate::kprintln!("Version: 0.2.0 \"Horizon\"");
     crate::kprintln!("Arch: x86_64");
     crate::kprintln!("========================================");
     crate::kprintln!("System halted. Please reboot.");

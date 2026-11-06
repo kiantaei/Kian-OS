@@ -1,4 +1,5 @@
 use crate::kprintln;
+use alloc::vec::Vec;
 
 pub mod ethernet;
 pub mod arp;

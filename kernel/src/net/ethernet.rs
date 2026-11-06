@@ -1,4 +1,5 @@
 use crate::kprintln;
+use alloc::vec::Vec;
 use core::convert::TryInto;
 
 #[repr(C, packed)]
