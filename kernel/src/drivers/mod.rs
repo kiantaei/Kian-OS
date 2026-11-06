@@ -1,6 +1,5 @@
 use crate::kprintln;
 
-pub mod vga;
 pub mod keyboard;
 pub mod ps2_mouse;
 pub mod svga;
@@ -20,7 +19,6 @@ pub mod virtio_net;
 
 pub fn init() {
     kprintln!("[Kian] Driver framework initialized");
-    vga::init();
     keyboard::init();
     ps2_mouse::init();
     svga::init();

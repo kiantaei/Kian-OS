@@ -20,6 +20,7 @@ SECTIONS
     . = ALIGN(CONSTANT(MAXPAGESIZE));
     .rodata : {
         *(.rodata .rodata.*)
+        *(.data.rel.ro*)
     } :rodata
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));
@@ -28,12 +29,23 @@ SECTIONS
     } :data
 
     /* Kept as a named output section (still inside the :data PT_LOAD segment)
-     * so the Limine requests survive gc and are visible in `readelf -S`.
+     * so the Limine requests survive and are visible in `readelf -S`.
      * Order matters: start marker -> requests -> end marker. */
     .limine_requests : {
         KEEP(*(.limine_requests_start))
         KEEP(*(.limine_requests))
         KEEP(*(.limine_requests_end))
+    } :data
+
+    .init_array : {
+        __init_array_start = .;
+        KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+        KEEP(*(.init_array))
+        __init_array_end = .;
+    } :data
+
+    .got : {
+        *(.got .got.*)
     } :data
 
     .bss : {
