@@ -114,7 +114,8 @@ pub fn send_packet(dst_ip: [u8; 4], protocol: u8, payload: &[u8]) -> bool {
     header[10..12].copy_from_slice(&[0, 0]); // checksum placeholder
     header[12..16].copy_from_slice(&our_ip());
     header[16..20].copy_from_slice(&dst_ip);
-    header[10..12].copy_from_slice(&checksum(&header).to_be_bytes());
+    let csum = checksum(&header);
+    header[10..12].copy_from_slice(&csum.to_be_bytes());
 
     let mut packet = Vec::with_capacity(20 + payload.len());
     packet.extend_from_slice(&header);

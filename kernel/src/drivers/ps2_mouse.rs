@@ -14,7 +14,7 @@ pub fn init() {
 
 pub fn read_packet() -> Option<(i8, i8, i8, u8)> {
     let mut status = Port::<u8>::new(0x64);
-    let data = Port::<u8>::new(0x60);
+    let mut data = Port::<u8>::new(0x60);
     let s = unsafe { status.read() };
     if s & 0x01 == 0 {
         return None;
