@@ -1,16 +1,12 @@
-use crate::console::{writer, Color, ColorCode};
-use spin::Mutex;
-
-pub static VGA: Mutex<Option<()>> = Mutex::new(None);
+// Kian OS - VGA text-mode driver (DISABLED STUB)
+// The framebuffer console in crate::console is in use, so this driver is
+// disabled. The public functions are kept as stubs so existing call sites
+// (e.g. drivers::init -> vga::init) keep compiling.
 
 pub fn init() {
-    let mut w = writer().lock();
-    w.color_code = ColorCode::new(Color::LightGreen, Color::Black);
-    *VGA.lock() = Some(());
-    crate::kprintln!("[Kian] VGA text mode driver active");
+    crate::kprintln!("[Kian] VGA text driver disabled (framebuffer console in use)");
 }
 
-pub fn set_color(fg: Color, bg: Color) {
-    let mut w = writer().lock();
-    w.color_code = ColorCode::new(fg, bg);
+pub fn set_color(fg: u32, bg: u32) {
+    let _ = (fg, bg);
 }

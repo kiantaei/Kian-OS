@@ -108,9 +108,9 @@ fn draw_char_at(fb: &crate::gui::framebuffer::Framebuffer, x: u32, y: u32, ch: u
         let pixels = glyph[row];
         for col in 0..8 {
             if (pixels >> (7 - col)) & 1 == 1 {
-                let px_addr = (y + row) as usize * (fb.pitch as usize) + (x + col) as usize * 4;
+                let px_addr = (y as usize + row as usize) * (fb.pitch as usize) + (x as usize + col as usize) * 4;
                 let px = unsafe { fb.address.add(px_addr) as *mut u32 };
-                *px = color;
+                unsafe { *px = color; }
             }
         }
     }
@@ -146,4 +146,20 @@ pub fn write_str(s: &str) {
     for byte in s.bytes() {
         put_byte(byte);
     }
+}
+
+struct ConsoleWriter;
+
+impl fmt::Write for ConsoleWriter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for b in s.bytes() {
+            put_byte(b);
+        }
+        Ok(())
+    }
+}
+
+pub fn _print(args: fmt::Arguments) {
+    use core::fmt::Write;
+    let _ = ConsoleWriter.write_fmt(args);
 }

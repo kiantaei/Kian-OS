@@ -91,13 +91,13 @@ pub extern "C" fn _start() -> ! {
     serial::write_str("KIAN: kernel alive\n");
 
     // Stage gated inits (all false for now)
-    if ENABLE_GDT { arch::gdt::init(); serial::write_str("[Kian] GDT OK\n"); }
-    if ENABLE_IDT { arch::idt::init(); serial::write_str("[Kian] IDT OK\n"); }
+    if ENABLE_GDT  { arch::x86_64::gdt::init();  serial::write_str("[Kian] GDT OK\n"); }
+    if ENABLE_IDT  { arch::x86_64::idt::init();  serial::write_str("[Kian] IDT OK\n"); }
     if ENABLE_HEAP { memory::heap::init(); serial::write_str("[Kian] HEAP OK\n"); }
-    if ENABLE_APIC { arch::apic::init(); serial::write_str("[Kian] APIC OK\n"); }
-    if ENABLE_HPET { arch::hpet::init(); serial::write_str("[Kian] HPET OK\n"); }
-    if ENABLE_PIT { arch::pit::init(); serial::write_str("[Kian] PIT OK\n"); }
-    if ENABLE_RTC { arch::rtc::init(); serial::write_str("[Kian] RTC OK\n"); }
+    if ENABLE_APIC { arch::x86_64::apic::init(); serial::write_str("[Kian] APIC OK\n"); }
+    if ENABLE_HPET { arch::x86_64::hpet::init(); serial::write_str("[Kian] HPET OK\n"); }
+    if ENABLE_PIT  { arch::x86_64::pit::init();  serial::write_str("[Kian] PIT OK\n"); }
+    if ENABLE_RTC  { arch::x86_64::rtc::init();  serial::write_str("[Kian] RTC OK\n"); }
     if ENABLE_SCHEDULER { scheduler::init(); serial::write_str("[Kian] SCHED OK\n"); }
     if ENABLE_PROCESS { process::init(); serial::write_str("[Kian] PROC OK\n"); }
     if ENABLE_SYSCALL { syscall::init(); serial::write_str("[Kian] SYSCALL OK\n"); }
@@ -111,24 +111,26 @@ pub extern "C" fn _start() -> ! {
 }
 
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    serial::write_str("KIAN: PANIC: ");
-    serial::write_str(info.message().unwrap_or("unknown"));
-    serial::write_str("\n");
-    console::draw_text(0, 16, "KERNEL PANIC", 0xFF0000);
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    unsafe { core::arch::asm!("cli"); }
+    crate::kprintln!("");
+    crate::kprintln!("*** KIAN KERNEL PANIC ***");
+    if let Some(loc) = info.location() {
+        crate::kprintln!("at {}:{}", loc.file(), loc.line());
+    }
+    crate::kprintln!("{}", info.message());
     loop { unsafe { core::arch::asm!("hlt"); } }
 }
 
 #[macro_export]
 macro_rules! kprint {
-    ($($arg:tt)*) => ({
-        use core::fmt::Write;
-        $crate::console::writer().lock().write_fmt(format_args!($($arg)*)).unwrap();
-    });
+    ($($arg:tt)*) => {
+        $crate::console::_print(format_args!($($arg)*))
+    };
 }
 
 #[macro_export]
 macro_rules! kprintln {
-    () => ($crate::kprint!("\n"));
-    ($($arg:tt)*) => ($crate::kprint!("{}\n", format_args!($($arg)*)));
+    () => { $crate::kprint!("\n") };
+    ($($arg:tt)*) => { $crate::kprint!("{}\n", format_args!($($arg)*)) };
 }
