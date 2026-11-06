@@ -12,6 +12,7 @@
 static const bool GUI_REQUIRES_LOGIN = false;
 
 Shell *SH = 0;
+Theme *THEME = 0;   // single definition (declared extern in theme.h)
 
 static void slog(const char *s) {
     kian_serial_write(s, strlen(s));
