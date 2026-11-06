@@ -45,22 +45,25 @@ impl BumpAllocator {
     }
 }
 
-#[global_allocator]
-static ALLOCATOR: Mutex<BumpAllocator> = Mutex::new(BumpAllocator::empty());
+// Newtype wrapper to satisfy orphan rules for GlobalAlloc.
+struct GlobalBumpAllocator(Mutex<BumpAllocator>);
 
-unsafe impl GlobalAlloc for Mutex<BumpAllocator> {
+#[global_allocator]
+static ALLOCATOR: GlobalBumpAllocator = GlobalBumpAllocator(Mutex::new(BumpAllocator::empty()));
+
+unsafe impl GlobalAlloc for GlobalBumpAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        self.lock().alloc(layout)
+        self.0.lock().alloc(layout)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.lock().dealloc(ptr, layout);
+        self.0.lock().dealloc(ptr, layout);
     }
 }
 
 pub fn init() {
     unsafe {
-        ALLOCATOR.lock().init(HEAP_START, HEAP_SIZE);
+        ALLOCATOR.0.lock().init(HEAP_START, HEAP_SIZE);
     }
     crate::kprintln!("[Kian] Heap: {} bytes ({:.1} MiB) at {:#x}", HEAP_SIZE, HEAP_SIZE as f64 / 1024.0 / 1024.0, HEAP_START);
 }

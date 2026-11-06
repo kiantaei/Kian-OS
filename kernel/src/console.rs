@@ -1,10 +1,11 @@
 use core::fmt::Write;
+use core::ptr::{read_volatile, write_volatile};
+use core::sync::Once;
 use spin::Mutex;
-use volatile::Volatile;
 
 const BUFFER_HEIGHT: usize = 25;
 const BUFFER_WIDTH: usize = 80;
-const VGA_ADDRESS: *mut Volatile<ScreenChar> = 0xb8000 as *mut _;
+const VGA_ADDRESS: *mut Buffer = 0xb8000 as *mut _;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,9 +31,9 @@ pub enum Color {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
-struct ScreenChar {
-    ascii: u8,
-    color_code: ColorCode,
+pub struct ScreenChar {
+    pub ascii: u8,
+    pub color_code: ColorCode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,22 +46,22 @@ impl ColorCode {
     }
 }
 
-struct Buffer {
-    chars: [[Volatile<ScreenChar>; BUFFER_WIDTH]; BUFFER_HEIGHT],
+pub struct Buffer {
+    pub chars: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT],
 }
 
 pub struct Writer {
-    column: usize,
-    color_code: ColorCode,
-    buffer: &'static mut Buffer,
+    pub column: usize,
+    pub color_code: ColorCode,
+    pub buffer: &'static mut Buffer,
 }
 
 impl Writer {
-    pub fn new() -> Self {
+    pub fn new(buffer: &'static mut Buffer) -> Self {
         Writer {
             column: 0,
             color_code: ColorCode::new(Color::LightGray, Color::Black),
-            buffer: unsafe { &mut *VGA_ADDRESS },
+            buffer,
         }
     }
 
@@ -74,7 +75,12 @@ impl Writer {
                 let row = BUFFER_HEIGHT - 1;
                 let col = self.column;
                 let color = self.color_code;
-                self.buffer.chars[row][col].write(ScreenChar { ascii: byte, color_code: color });
+                unsafe {
+                    write_volatile(
+                        &mut self.buffer.chars[row][col] as *mut ScreenChar,
+                        ScreenChar { ascii: byte, color_code: color },
+                    );
+                }
                 self.column += 1;
             }
         }
@@ -83,8 +89,15 @@ impl Writer {
     fn new_line(&mut self) {
         for row in 1..BUFFER_HEIGHT {
             for col in 0..BUFFER_WIDTH {
-                let c = self.buffer.chars[row][col].read();
-                self.buffer.chars[row - 1][col].write(c);
+                let c = unsafe {
+                    read_volatile(&self.buffer.chars[row][col] as *const ScreenChar)
+                };
+                unsafe {
+                    write_volatile(
+                        &mut self.buffer.chars[row - 1][col] as *mut ScreenChar,
+                        c,
+                    );
+                }
             }
         }
         self.clear_row(BUFFER_HEIGHT - 1);
@@ -94,24 +107,31 @@ impl Writer {
     fn clear_row(&mut self, row: usize) {
         let blank = ScreenChar { ascii: b' ', color_code: self.color_code };
         for col in 0..BUFFER_WIDTH {
-            self.buffer.chars[row][col].write(blank);
+            unsafe {
+                write_volatile(
+                    &mut self.buffer.chars[row][col] as *mut ScreenChar,
+                    blank,
+                );
+            }
         }
     }
 }
 
-impl Write for Writer {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for byte in s.bytes() {
-            self.write_byte(byte);
-        }
-        Ok(())
+static WRITER_INIT: Once = Once::new();
+static mut WRITER: Option<Mutex<Writer>> = None;
+
+pub fn writer() -> &'static Mutex<Writer> {
+    unsafe {
+        WRITER_INIT.call_once(|| {
+            WRITER = Some(Mutex::new(Writer::new(unsafe { &mut *VGA_ADDRESS })));
+        });
+        WRITER.as_mut().unwrap()
     }
 }
-
-pub static WRITER: Mutex<Writer> = Mutex::new(Writer::new());
 
 pub fn early_init() {
-    let mut writer = WRITER.lock();
+    let w = writer();
+    let mut writer = w.lock();
     for row in 0..BUFFER_HEIGHT {
         writer.clear_row(row);
     }

@@ -8,6 +8,7 @@ pub enum TaskState {
     Terminated,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Task {
     pub id: u64,
     pub state: TaskState,

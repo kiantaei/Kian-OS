@@ -3,6 +3,7 @@ use crate::memory;
 use crate::kprintln;
 use alloc::vec::Vec;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Process {
     pub pid: u32,
     pub name: &'static str,

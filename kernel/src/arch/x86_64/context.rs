@@ -1,8 +1,8 @@
 use core::arch::asm;
 
-// Switch from current stack pointer `from` to `to`, then call `switch(target)`.
-// Returns in `from` context.
-#[naked]
+// Switch from current stack pointer `from` to `to`, then jump to `target`.
+// Never returns.
+#[unsafe(naked)]
 pub unsafe extern "C" fn switch(from: *mut u64, to: *mut u64, target: *mut u8) -> ! {
     asm!(
         "mov [rdi], rsp",   // save current sp into *from
@@ -13,16 +13,17 @@ pub unsafe extern "C" fn switch(from: *mut u64, to: *mut u64, target: *mut u8) -
         "push r13",
         "push r14",
         "push r15",
-        "mov rsp, [rsi]",   // reload rsp (in case)
         "jmp *rdx",         // jump to target function
-        :
-        : "{rdi}" (from), "{rsi}" (to), "{rdx}" (target)
-        : "memory"
-        : "intel", "noreturn"
+        in("rdi") from,
+        in("rsi") to,
+        in("rdx") target,
+        options(noreturn)
     );
+    core::hint::unreachable_unchecked();
 }
 
-#[naked]
+#[unsafe(naked)]
 pub unsafe extern "C" fn context_switch_trampoline() -> ! {
-    asm!("ret", : : : : "intel", "noreturn");
+    asm!("ret", options(noreturn));
+    core::hint::unreachable_unchecked();
 }

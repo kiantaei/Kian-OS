@@ -74,14 +74,14 @@ pub fn init() {
 
     // Wire the request's response pointer to our storage.
     unsafe {
-        FRAMEBUFFER_REQUEST_ENTRY.response = &mut FB_RESPONSE_PTR;
+        FRAMEBUFFER_REQUEST_ENTRY.response = FB_RESPONSE_PTR;
     }
 
     // After Limine has filled the response, check if we got a framebuffer.
     let fb_resp = unsafe { FB_RESPONSE_PTR.as_ref() };
     match fb_resp {
-        Some(resp) if resp.framebuffer_count > 0 => {
-            let fb_ptr = unsafe { resp.framebuffers.as_ref() };
+        Some(resp) if (*resp).framebuffer_count > 0 => {
+            let fb_ptr = unsafe { (*resp).framebuffers.as_ref() };
             if let Some(fb) = fb_ptr {
                 let fb = unsafe { &*fb };
                 let addr = fb.addr as *mut u32;
@@ -134,9 +134,10 @@ pub fn fill_screen(color: u32) {
     let bytes_per_px = 4usize;
     unsafe {
         for y in 0..fb.height {
-            let row_base = fb.address.offset((y * fb.pitch as isize) as isize) as *mut u8;
+            let row_offset = (y as usize) * (fb.pitch as usize);
+            let row_base = fb.address.add(row_offset) as *mut u8;
             for x in 0..fb.width {
-                let px = row_base.offset((x * bytes_per_px) as isize) as *mut u32;
+                let px = row_base.add((x as usize) * bytes_per_px) as *mut u32;
                 *px = color;
             }
         }

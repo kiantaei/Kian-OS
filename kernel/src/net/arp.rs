@@ -90,10 +90,10 @@ pub fn handle_packet(buf: &[u8]) {
         return;
     }
 
-    let sha = buf[8..14].try_into().unwrap();
-    let spa = buf[14..18].try_into().unwrap();
-    let tha = buf[18..24].try_into().unwrap();
-    let tpa = buf[24..28].try_into().unwrap();
+    let sha: [u8; 6] = buf[8..14].try_into().unwrap();
+    let spa: [u8; 4] = buf[14..18].try_into().unwrap();
+    let tha: [u8; 6] = buf[18..24].try_into().unwrap();
+    let tpa: [u8; 4] = buf[24..28].try_into().unwrap();
 
     // Learn sender.
     insert(&spa, &sha);

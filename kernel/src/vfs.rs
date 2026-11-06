@@ -1,5 +1,6 @@
 use crate::kprintln;
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use spin::Mutex;
 
@@ -9,6 +10,18 @@ pub struct Vnode {
     pub inode: u64,
     pub size: u64,
     pub readonly: bool,
+}
+
+impl Clone for Vnode {
+    fn clone(&self) -> Self {
+        Vnode {
+            name: self.name.clone(),
+            fs_type: self.fs_type,
+            inode: self.inode,
+            size: self.size,
+            readonly: self.readonly,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

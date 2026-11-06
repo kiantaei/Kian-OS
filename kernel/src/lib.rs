@@ -75,16 +75,13 @@ pub extern "C" fn kernel_main() -> ! {
 
     // Start userspace (initramfs -> /sbin/init).
     process::start_userspace();
-
-    kprintln!("[Kian] Kernel panic: userspace exited");
-    crate::panic::halt("userspace exited");
 }
 
 #[macro_export]
 macro_rules! kprint {
     ($($arg:tt)*) => ({
         use core::fmt::Write;
-        $crate::console::WRITER.lock().write_fmt(format_args!($($arg)*)).unwrap();
+        $crate::console::writer().lock().write_fmt(format_args!($($arg)*)).unwrap();
     });
 }
 

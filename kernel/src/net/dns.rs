@@ -1,4 +1,6 @@
 use crate::kprintln;
+use alloc::vec::Vec;
+use crate::net::udp;
 
 pub fn init() {
     kprintln!("[Kian] DNS resolver initialized (cache enabled)");
