@@ -13,6 +13,11 @@ fi
 make -C "$LIMINE_DIR"
 
 mkdir -p "$ISO_DIR/boot/limine" "$ISO_DIR/EFI/BOOT"
+
+# Loud sanity checks: config + kernel must be in the exact places Limine expects.
+[ -f "$ROOT/config/limine.conf" ] || { echo "[Kian] ERROR: config/limine.conf missing"; exit 1; }
+[ -f "$ISO_DIR/boot/kian-kernel.elf" ] || { echo "[Kian] ERROR: $ISO_DIR/boot/kian-kernel.elf missing (build.sh must link the kernel BEFORE building the ISO)"; exit 1; }
+
 cp "$ROOT/config/limine.conf" "$ISO_DIR/boot/limine/limine.conf"
 cp "$LIMINE_DIR/limine-bios.sys" "$LIMINE_DIR/limine-bios-cd.bin" "$LIMINE_DIR/limine-uefi-cd.bin" "$ISO_DIR/boot/limine/"
 cp "$LIMINE_DIR/BOOTX64.EFI" "$LIMINE_DIR/BOOTIA32.EFI" "$ISO_DIR/EFI/BOOT/"

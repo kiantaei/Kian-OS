@@ -36,8 +36,16 @@ echo "[Kian] Kernel ELF:"
 file "$ISO_DIR/boot/kian-kernel.elf" || true
 readelf -h "$ISO_DIR/boot/kian-kernel.elf" | grep -E "Entry point|Type" || true
 
+echo "[Kian] ---- ELF check ----"
+readelf -lS "$ISO_DIR/boot/kian-kernel.elf" | head -60
+nm "$ISO_DIR/boot/kian-kernel.elf" | grep -E " _start$" || { echo "[Kian] ERROR: _start missing in ELF"; exit 1; }
+readelf -S "$ISO_DIR/boot/kian-kernel.elf" | grep -q "limine" || { echo "[Kian] ERROR: no .limine_requests section in the ELF (the linker removed the Limine requests)"; exit 1; }
+
 echo "[Kian] Building ISO..."
 bash "$ROOT/tools/make_iso.sh" "$ISO_DIR" "$OUT_ISO"
+
+echo "[Kian] ---- ISO contents ----"
+xorriso -indev "$OUT_ISO" -find / 2>/dev/null | head -40
 
 sha256sum "$OUT_ISO" > "$OUT_ISO.sha256"
 echo "[Kian] Done: $OUT_ISO"

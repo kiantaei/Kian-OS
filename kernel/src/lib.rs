@@ -11,6 +11,7 @@
 extern crate alloc;
 extern crate spin;
 extern crate x86_64;
+extern crate limine;
 
 pub mod arch;
 pub mod memory;
@@ -29,6 +30,9 @@ pub mod font;
 
 use core::panic::PanicInfo;
 use crate::arch::x86_64::serial;
+use limine::request::FramebufferRequest;
+use limine::{BaseRevision, RequestsEndMarker, RequestsStartMarker};
+use x86_64::instructions::port::Port;
 
 // Boot banner
 pub static BOOT_BANNER: &str = r#"
@@ -59,8 +63,139 @@ const ENABLE_DRIVERS: bool = false;
 // Static heap: 4 MiB in .bss, no hard-coded physical addresses.
 static mut HEAP_MEM: [u8; 4 * 1024 * 1024] = [0; 4 * 1024 * 1024];
 
+/* ==== Limine request statics (limine crate 0.6.5) ====
+ * The start/end markers delimit the request region; Limine v8 scans between
+ * them. Every request static is #[used] and pinned to .limine_requests so the
+ * linker can never drop or relocate it. */
+
+#[used]
+#[unsafe(link_section = ".limine_requests_start")]
+static LIMINE_START_MARKER: RequestsStartMarker = RequestsStartMarker::new();
+
+#[used]
+#[unsafe(link_section = ".limine_requests_end")]
+static LIMINE_END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
+
+#[used]
+#[unsafe(link_section = ".limine_requests")]
+pub static BASE_REVISION: BaseRevision = BaseRevision::new();
+
+#[used]
+#[unsafe(link_section = ".limine_requests")]
+pub static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
+
+/* ==== Minimal debug output: plain port I/O, no locks, no allocation ==== */
+
+/// Bring up COM1 (115200 8N1, FIFO on) exactly per the init sequence.
+fn debug_uart_init() {
+    unsafe {
+        Port::<u8>::new(0x3F9).write(0x00); // IER: disable UART interrupts
+        Port::<u8>::new(0x3FB).write(0x80); // LCR: DLAB=1
+        Port::<u8>::new(0x3F8).write(0x01); // divisor low = 1  -> 115200 baud
+        Port::<u8>::new(0x3F9).write(0x00); // divisor high = 0
+        Port::<u8>::new(0x3FB).write(0x03); // LCR: 8N1, DLAB=0
+        Port::<u8>::new(0x3FA).write(0xC7); // FCR: FIFO enabled + cleared
+        Port::<u8>::new(0x3FC).write(0x0B); // MCR: DTR | RTS | OUT2
+    }
+}
+
+/// Send one byte to COM1 (0x3F8) AND the QEMU debug console (0xE9).
+fn debug_putc(b: u8) {
+    unsafe {
+        // Wait for bit 5 (THR empty) of the Line Status Register.
+        while (Port::<u8>::new(0x3FD).read() & 0x20) == 0 {
+            core::hint::spin_loop();
+        }
+        Port::<u8>::new(0x3F8).write(b); // COM1 data register
+        Port::<u8>::new(0xE9).write(b);  // QEMU debugcon (isa-debugcon)
+    }
+}
+
+fn debug_write(s: &str) {
+    for b in s.bytes() {
+        debug_putc(b);
+    }
+}
+
+fn debug_write_dec(mut v: u64) {
+    if v == 0 {
+        debug_putc(b'0');
+        return;
+    }
+    let mut buf = [0u8; 20];
+    let mut i = buf.len();
+    while v > 0 {
+        i -= 1;
+        buf[i] = b'0' + (v % 10) as u8;
+        v /= 10;
+    }
+    debug_write(core::str::from_utf8(&buf[i..]).unwrap_or("?"));
+}
+
+/// MINIMAL boot: prove out COM1 + debugcon + Limine framebuffer + pixels.
+/// No gdt/idt/heap/memory/drivers/net/gui/scheduler init for now.
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
+    // 1. Interrupts off.
+    unsafe { core::arch::asm!("cli"); }
+
+    // 2. "KIAN: _start" to COM1 and the QEMU debug console (0xE9).
+    debug_uart_init();
+    debug_write("KIAN: _start\n");
+
+    // 3. Limine base revision check.
+    if BASE_REVISION.is_supported() {
+        debug_write("KIAN: base revision supported\n");
+    } else {
+        debug_write("KIAN: base revision NOT SUPPORTED\n");
+    }
+
+    // 4. Limine framebuffer response.
+    match FRAMEBUFFER_REQUEST.response() {
+        Some(resp) => {
+            debug_write("KIAN: fb response present\n");
+            if let Some(fb) = resp.framebuffers().first() {
+                // 5. Fill the WHOLE screen solid RED (0x00FF0000), 32-bit pixels.
+                //    Row start = base + y * pitch (pitch is in BYTES).
+                let base = fb.address() as usize;
+                let w = fb.width;
+                let h = fb.height;
+                let pitch = fb.pitch;
+                let bpp = fb.bpp as u64;
+                for y in 0..h {
+                    let row = (base + (y * pitch) as usize) as *mut u32;
+                    for x in 0..w {
+                        unsafe { row.add(x as usize).write_volatile(0x00FF0000); }
+                    }
+                }
+                debug_write("KIAN: screen filled ");
+                debug_write_dec(w);
+                debug_write("x");
+                debug_write_dec(h);
+                debug_write(" bpp=");
+                debug_write_dec(bpp);
+                debug_write(" pitch=");
+                debug_write_dec(pitch);
+                debug_write("\n");
+            } else {
+                debug_write("KIAN: fb response present but ZERO framebuffers\n");
+            }
+        }
+        None => {
+            debug_write("KIAN: NO FB RESPONSE\n");
+        }
+    }
+
+    // 6. Halt forever.
+    loop {
+        unsafe { core::arch::asm!("hlt"); }
+    }
+}
+
+/// The old full-init boot path, kept intact but NOT called.
+/// Re-enable it later by having _start call full_boot() again.
+#[allow(dead_code)]
+fn full_boot() -> ! {
     // 1. Interrupts off.
     unsafe { core::arch::asm!("cli"); }
 
