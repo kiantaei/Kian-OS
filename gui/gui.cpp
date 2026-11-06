@@ -1,421 +1,617 @@
-// Kian OS GUI - main loop, apps, event handling. C++, freestanding, no STL.
-// ESC or "Exit to console" always returns to ksh (M4).
+// Kian OS GUI - main entry: shell loop, app registry, overlays, shortcuts,
+// dirty-region redraw with the cursor trick. C++17, freestanding, integers.
 #include "gui.h"
-#include "runtime.h"
-#include "gfx.h"
-#include "wm.h"
-#include "desktop.h"
-#include "vec.h"
+#include "apps.h"
+#include "ramfs.h"
+#include "input.h"
+#include "icons.h"
+#include "util.h"
 
-static inline void kpause() { __asm__ volatile("pause"); }
+// Set to false: ksh already asked for a login before starting the GUI.
+// The lock screen (Win+L / Ctrl+Alt+L) still works.
+static const bool GUI_REQUIRES_LOGIN = false;
 
-// ---------- app state (all created inside gui_main - no global ctors) ----------
+Shell *SH = 0;
 
-struct CalcState {
-    Str display;
-    long long acc;
-    int op;          // 0 none, 1 +, 2 -, 3 *, 4 /, 5 %
-    bool fresh;      // start a new number on next digit
-    bool err;
+static void slog(const char *s) {
+    kian_serial_write(s, strlen(s));
+}
 
-    CalcState() : acc(0), op(0), fresh(true), err(false) { display.append("0"); }
+// ---------------- app registry ----------------
 
-    void digit(char c) {
-        if (err) clear_all();
-        if (fresh) { display.clear(); fresh = false; }
-        if (display.length() < 12) display.append(c);
-    }
-    void clear_all() { display.clear(); display.append("0"); acc = 0; op = 0; fresh = true; err = false; }
-    long long parse_display() {
-        const char *s = display.c_str();
-        bool neg = false; int i = 0;
-        if (s[0] == '-') { neg = true; i = 1; }
-        long long v = 0;
-        for (; s[i] >= '0' && s[i] <= '9'; i++) v = v * 10 + (s[i] - '0');
-        return neg ? -v : v;
-    }
-    void set_display(long long a) {
-        char buf[24];
-        unsigned long long m;
-        if (a < 0) { m = (unsigned long long)(-(a + 1)) + 1; } else { m = (unsigned long long)a; }
-        int n = 0;
-        if (m == 0) buf[n++] = '0';
-        while (m > 0 && n < 22) { buf[n++] = (char)('0' + (m % 10)); m /= 10; }
-        display.clear();
-        if (a < 0) display.append('-');
-        while (n > 0) display.append(buf[--n]);
-    }
-    void apply_op() {
-        if (err) return;
-        long long v = parse_display();
-        if (op == 0) acc = v;
-        else if (op == 1) acc += v;
-        else if (op == 2) acc -= v;
-        else if (op == 3) acc *= v;
-        else if (op == 4) {
-            if (v == 0) { err = true; display.clear(); display.append("ERR"); op = 0; fresh = true; return; }
-            acc /= v;
-        } else if (op == 5) {
-            if (v == 0) { err = true; display.clear(); display.append("ERR"); op = 0; fresh = true; return; }
-            acc %= v;
-        }
-        set_display(acc);
-        fresh = true;
-    }
-    void set_op(int o) {
-        apply_op();
-        op = o;
-    }
-    void negate() {
-        const char *src = display.c_str();
-        bool had_minus = (src[0] == '-');
-        Str t;
-        if (!had_minus) t.append('-');
-        for (int i = had_minus ? 1 : 0; src[i] != '\0'; i++) t.append(src[i]);
-        display.clear();
-        const char *ts = t.c_str();
-        for (int i = 0; ts[i] != '\0'; i++) display.append(ts[i]);
-    }
+struct AppDef { const char *title; int icon; int w, h; };
+static const AppDef APPS[9] = {
+    { "", 0, 0, 0 },                                   // APP_NONE
+    { "Kian Browser", IC_BROWSER, 640, 460 },          // APP_BROWSER
+    { "Terminal", IC_TERMINAL, 560, 360 },             // APP_TERM
+    { "Files", IC_FILES, 640, 420 },                   // APP_FILES
+    { "Notepad", IC_NOTES, 520, 400 },                 // APP_NOTES
+    { "Settings", IC_SETTINGS, 620, 440 },             // APP_SETTINGS
+    { "Task Manager", IC_TASKMGR, 460, 440 },          // APP_TASKMGR
+    { "Calculator", IC_CALC, 264, 360 },               // APP_CALC
+    { "Paint", IC_PAINT, 560, 440 }                    // APP_PAINT
 };
 
-// ---------- cursor (drawn LAST) ----------
-
-static const char *CURSOR[] = {
-    "X.........",
-    "XX........",
-    "XOX.......",
-    "XOOX......",
-    "XOOOX.....",
-    "XOOOOX....",
-    "XOOOOOX...",
-    "XOOOOOOX..",
-    "XOOOOOOOX.",
-    "XOOOOXXXXX",
-    "XOXOOX....",
-    "XOX.XOOX..",
-    "XX..XOOX..",
-    "....XOOX..",
-    ".....XOOX.",
-    ".....XOOX.",
-    "......XOX.",
-    "......XOX.",
-    ".......X.."
-};
-static const int CUR_W = 10, CUR_H = 19;
-
-static void draw_cursor(Surface &s, int cx, int cy) {
-    for (int y = 0; y < CUR_H; y++) {
-        const char *row = CURSOR[y];
-        for (int x = 0; x < CUR_W; x++) {
-            char c = row[x];
-            if (c == 'X') put_pixel(s, cx + x, cy + y, 0x00000000);
-            else if (c == 'O') put_pixel(s, cx + x, cy + y, 0x00FFFFFF);
-        }
+static bool app_attach(Window *w, int app, const char *path) {
+    switch (app) {
+    case APP_BROWSER:
+        w->inst = browser_create(); w->draw = browser_draw;
+        w->event = browser_event; w->destroy = browser_destroy;
+        return w->inst != 0;
+    case APP_TERM:
+        w->inst = term_create(); w->draw = term_draw;
+        w->event = term_event; w->destroy = term_destroy;
+        return w->inst != 0;
+    case APP_FILES:
+        w->inst = files_create(); w->draw = files_draw;
+        w->event = files_event; w->destroy = files_destroy;
+        return w->inst != 0;
+    case APP_NOTES:
+        w->inst = path ? notes_create_path(path) : notes_create();
+        w->draw = notes_draw; w->event = notes_event; w->destroy = notes_destroy;
+        return w->inst != 0;
+    case APP_SETTINGS:
+        w->inst = setapp_create(); w->draw = setapp_draw;
+        w->event = setapp_event; w->destroy = setapp_destroy;
+        return w->inst != 0;
+    case APP_TASKMGR:
+        w->inst = taskmgr_create(); w->draw = taskmgr_draw;
+        w->event = taskmgr_event; w->destroy = taskmgr_destroy;
+        return w->inst != 0;
+    case APP_CALC:
+        w->inst = calc_create(); w->draw = calc_draw;
+        w->event = calc_event; w->destroy = calc_destroy;
+        return w->inst != 0;
+    case APP_PAINT:
+        w->inst = paint_create(); w->draw = paint_draw;
+        w->event = paint_event; w->destroy = paint_destroy;
+        return w->inst != 0;
+    default:
+        return false;
     }
 }
 
-// ---------- app content drawing ----------
-
-// Draws a text buffer bottom-aligned, 8px line height (terminal / notes).
-static void draw_text_buffer(Surface &s, const Rect &c, const Theme &th, const Str &text) {
-    int total = 1;
-    for (int i = 0; i < text.n; i++) {
-        if (text.d[i] == '\n') total++;
+void app_open(int app) {
+    if (app <= APP_NONE || app > APP_PAINT || !SH) return;
+    // single instance per app: raise the existing window (any desktop)
+    for (int i = 0; i < WM_MAX_WINDOWS; i++) {
+        Window *ex = &SH->wm.win[i];
+        if (ex->used && ex->app == app) {
+            SH->desk.cur_desk = ex->desk_id;
+            SH->wm.cur_desk = ex->desk_id;
+            if (ex->state == WS_MIN) ex->state = WS_NORM;
+            wm_focus(&SH->wm, ex);
+            shell_full_redraw();
+            return;
+        }
     }
-    int visible = c.h / 8;
-    if (visible < 1) return;
-    int skip = (total > visible) ? (total - visible) : 0;
-    int shown = total - skip;
-    int y = c.y + (c.h > shown * 8 ? c.h - shown * 8 : 0);
-    int line = 0, x = c.x + 2;
-    for (int i = 0; i < text.n; i++) {
-        char ch = text.d[i];
-        if (ch == '\n') {
-            line++;
-            if (line > skip) y += 8;
-            x = c.x + 2;
-            continue;
-        }
-        if (line >= skip && y + 8 <= c.y + c.h) {
-            char b[2] = { ch, '\0' };
-            draw_text(s, x, y, b, th.text, 1);
-            x += 8;
-        }
+    const AppDef &def = APPS[app];
+    Window *w = wm_open(&SH->wm, app, def.title, def.icon, def.w, def.h, SH->desk.cur_desk);
+    if (!w) { shell_toast("Too many windows (32 max)"); return; }
+    if (!app_attach(w, app, 0)) {
+        wm_close_id(&SH->wm, w->id);
+        return;
+    }
+    shell_full_redraw();
+}
+
+void app_open_path(int app, const char *path) {
+    if (!SH || app != APP_NOTES || !path) return;
+    Window *w = wm_open(&SH->wm, app, "Notepad", IC_NOTES, APPS[app].w, APPS[app].h, SH->desk.cur_desk);
+    if (!w) return;
+    if (!app_attach(w, app, path)) {
+        wm_close_id(&SH->wm, w->id);
+        return;
+    }
+    shell_full_redraw();
+}
+
+void shell_full_redraw() { if (SH) SH->need_full = true; }
+
+void shell_mark_content() {
+    if (!SH) return;
+    Window *fw = wm_focused(&SH->wm);
+    if (fw) fw->dirty = true;
+}
+
+void shell_close_focused() {
+    if (!SH) return;
+    Window *fw = wm_focused(&SH->wm);
+    if (fw) wm_close_id(&SH->wm, fw->id);
+    shell_full_redraw();
+}
+
+void shell_toast(const char *text) {
+    if (SH) toast_show(&SH->desk, text);
+}
+
+// ---------------- overlays (Ctrl+Alt+Del, Run, Alt+Tab) ----------------
+
+static void draw_ctrldel() {
+    blend_rect(0, 0, GFX->w, GFX->h, 0x00000000, 190);
+    int w = 360, h = 240;
+    int x = (GFX->w - w) / 2, y = (GFX->h - h) / 2;
+    fill_round_rect(x, y, w, h, 8, THEME->menu_border);
+    fill_round_rect(x + 1, y + 1, w - 2, h - 2, 8, THEME->menu_bg);
+    draw_text_bold(x + 16, y + 14, "Ctrl+Alt+Del", THEME->text, 2);
+    static const char *lbl[4] = { "Lock", "Task Manager", "Sign out", "Shut down" };
+    for (int i = 0; i < 4; i++) {
+        int by = y + 56 + i * 42;
+        bool hov = mouse_in(x + 16, by, w - 32, 34);
+        fill_round_rect(x + 16, by, w - 32, 34, 6, hov ? THEME->start_bg_active : THEME->button_bg);
+        draw_text(x + 28, by + 13, lbl[i], THEME->button_fg, 1);
     }
 }
 
-static void draw_calc(Surface &s, const Rect &c, const Theme &th, CalcState &cs) {
-    fill_rect(s, c.x + 4, c.y + 4, c.w - 8, 24, th.button_bg);
-    draw_text(s, c.x + 8, c.y + 12, cs.display.c_str(), th.text, 1);
-    static const char *L[5][4] = {
-        { "C", "+-", "%", "/" },
-        { "7", "8", "9", "*" },
-        { "4", "5", "6", "-" },
-        { "1", "2", "3", "+" },
-        { "0", "=", "=", "=" }
-    };
-    for (int r = 0; r < 5; r++) {
-        for (int col = 0; col < 4; col++) {
-            if (r == 4 && col >= 1) continue; // last row: only "0" button drawn
-            int bx = c.x + 4 + col * ((c.w - 8) / 4);
-            int by = c.y + 32 + r * 26;
-            int bw = (c.w - 8) / 4 - 3;
-            int bh = 23;
-            fill_round_rect(s, bx, by, bw, bh, 3, th.button_bg);
-            draw_text(s, bx + bw / 2 - 4, by + 8, L[r][col], th.button_fg, 1);
+static bool ctrldel_event(const kian_event_t *e) {
+    if (e->type == KIAN_EV_KEY_DOWN && (e->a == KIAN_KEY_ESC || e->b == 27)) {
+        SH->ctrldel = false;
+        return true;
+    }
+    if (e->type != KIAN_EV_MOUSE_BTN || !IN->press_l) return false;
+    int w = 360, h = 240;
+    int x = (GFX->w - w) / 2, y = (GFX->h - h) / 2;
+    for (int i = 0; i < 4; i++) {
+        int by = y + 56 + i * 42;
+        if (mouse_in(x + 16, by, w - 32, 34)) {
+            SH->ctrldel = false;
+            if (i == 0) SH->lock_pending = true;
+            else if (i == 1) app_open(APP_TASKMGR);
+            else if (i == 2) SH->running = false; // sign out -> back to ksh
+            else if (i == 3) kian_shutdown();
+            return true;
         }
+    }
+    SH->ctrldel = false; // click outside closes
+    return true;
+}
+
+static void draw_run() {
+    int w = 380, h = 130;
+    int x = (GFX->w - w) / 2, y = (GFX->h - h) / 2;
+    fill_round_rect(x, y, w, h, 8, THEME->menu_border);
+    fill_round_rect(x + 1, y + 1, w - 2, h - 2, 8, THEME->menu_bg);
+    draw_text_bold(x + 16, y + 12, "Run", THEME->text, 2);
+    draw_text(x + 16, y + 40, "Type a program name (terminal, files, notepad, calc...)", THEME->text_dim, 1);
+    SH->run_box.x = x + 16;
+    SH->run_box.y = y + 62;
+    SH->run_box.w = w - 32;
+    SH->run_box.h = 28;
+    tbox_draw(&SH->run_box);
+}
+
+static void run_launch(const char *name) {
+    if (strcmp(name, "terminal") == 0 || strcmp(name, "term") == 0 || strcmp(name, "ksh") == 0) app_open(APP_TERM);
+    else if (strcmp(name, "files") == 0 || strcmp(name, "explorer") == 0) app_open(APP_FILES);
+    else if (strcmp(name, "notepad") == 0 || strcmp(name, "edit") == 0) app_open(APP_NOTES);
+    else if (strcmp(name, "calc") == 0 || strcmp(name, "calculator") == 0) app_open(APP_CALC);
+    else if (strcmp(name, "settings") == 0) app_open(APP_SETTINGS);
+    else if (strcmp(name, "taskmgr") == 0 || strcmp(name, "task manager") == 0) app_open(APP_TASKMGR);
+    else if (strcmp(name, "paint") == 0) app_open(APP_PAINT);
+    else if (strcmp(name, "browser") == 0 || strcmp(name, "web") == 0) app_open(APP_BROWSER);
+    else if (strcmp(name, "about") == 0) app_open(APP_SETTINGS);
+    else shell_toast("Run: program not found");
+}
+
+static bool run_event(const kian_event_t *e) {
+    if (e->type == KIAN_EV_KEY_DOWN) {
+        if (e->a == KIAN_KEY_ESC || e->b == 27) { SH->run_open = false; return true; }
+        if (tbox_key(&SH->run_box, e)) {
+            SH->run_open = false;
+            run_launch(tbox_text(&SH->run_box));
+            return true;
+        }
+        return true; // run dialog owns keys while open
+    }
+    if (e->type == KIAN_EV_MOUSE_BTN && IN->press_l) {
+        int w = 380, h = 130;
+        int x = (GFX->w - w) / 2, y = (GFX->h - h) / 2;
+        if (!rect_hit(IN->mx, IN->my, Rect{ x, y, w, h })) { SH->run_open = false; return true; }
+        tbox_mouse(&SH->run_box, e);
+        return true;
+    }
+    return false;
+}
+
+// ---------------- Alt+Tab ----------------
+
+static const int ALTMAX = 32;
+
+static int alt_list(int *ids, int cur_desk) {
+    int n = 0;
+    for (int i = SH->wm.order_n - 1; i >= 0 && n < ALTMAX; i--) {
+        Window *w = &SH->wm.win[SH->wm.order[i]];
+        if (w->used && w->desk_id == cur_desk) ids[n++] = w->id;
+    }
+    return n;
+}
+
+static void alttab_cycle(int cur_desk) {
+    int ids[ALTMAX];
+    int n = alt_list(ids, cur_desk);
+    if (n == 0) return;
+    if (!SH->alttab) {
+        SH->alttab = true;
+        SH->alttab_sel = (n > 1) ? 1 : 0;
+    } else {
+        SH->alttab_sel = (SH->alttab_sel + 1) % n;
     }
 }
 
-static int calc_button_at(const Rect &c, int x, int y) {
-    for (int r = 0; r < 5; r++) {
-        for (int col = 0; col < 4; col++) {
-            if (r == 4 && col >= 1) continue;
-            int bx = c.x + 4 + col * ((c.w - 8) / 4);
-            int by = c.y + 32 + r * 26;
-            int bw = (c.w - 8) / 4 - 3;
-            int bh = 23;
-            if (x >= bx && x < bx + bw && y >= by && y < by + bh) return r * 4 + col;
-        }
+static void alttab_commit(int cur_desk) {
+    int ids[ALTMAX];
+    int n = alt_list(ids, cur_desk);
+    SH->alttab = false;
+    if (n == 0) return;
+    int idx = iclamp(SH->alttab_sel, 0, n - 1);
+    Window *w = wm_get(&SH->wm, ids[idx]);
+    if (w) {
+        if (w->state == WS_MIN) w->state = WS_NORM;
+        wm_focus(&SH->wm, w);
     }
-    return -1;
+    shell_full_redraw();
 }
 
-static void calc_press(CalcState &cs, int idx) {
-    static const char *L[5][4] = {
-        { "C", "+-", "%", "/" },
-        { "7", "8", "9", "*" },
-        { "4", "5", "6", "-" },
-        { "1", "2", "3", "+" },
-        { "0", "=", "=", "=" }
-    };
-    int r = idx / 4, col = idx % 4;
-    const char *lbl = L[r][col];
-    if (lbl[0] >= '0' && lbl[0] <= '9') cs.digit(lbl[0]);
-    else if (lbl[0] == 'C') cs.clear_all();
-    else if (lbl[0] == '+') cs.set_op(1);
-    else if (lbl[0] == '-') cs.set_op(2);
-    else if (lbl[0] == '*') cs.set_op(3);
-    else if (lbl[0] == '/') cs.set_op(4);
-    else if (lbl[0] == '%') cs.set_op(5);
-    else if (lbl[0] == '+' && lbl[1] == '-') cs.negate();
-    else if (lbl[0] == '=') { cs.apply_op(); cs.op = 0; }
+static void draw_alttab(int cur_desk) {
+    int ids[ALTMAX];
+    int n = alt_list(ids, cur_desk);
+    if (n == 0) return;
+    int bw = 340, bh = 40 + n * 30;
+    int x = (GFX->w - bw) / 2, y = (GFX->h - bh) / 2;
+    fill_round_rect(x, y, bw, bh, 8, THEME->menu_border);
+    fill_round_rect(x + 1, y + 1, bw - 2, bh - 2, 8, THEME->menu_bg);
+    for (int i = 0; i < n; i++) {
+        Window *w = wm_get(&SH->wm, ids[i]);
+        if (!w) continue;
+        int iy = y + 24 + i * 30;
+        bool sel = (i == iclamp(SH->alttab_sel, 0, n - 1));
+        if (sel) fill_round_rect(x + 8, iy - 4, bw - 16, 28, 4, THEME->start_bg_active);
+        icon_draw(w->icon, x + 16, iy, 16, THEME->accent);
+        draw_text(x + 40, iy + 4, w->title, sel ? 0x00FFFFFF : THEME->text, 1);
+    }
 }
 
-// settings window: remembers the theme toggle button rect (screen coords)
-static Rect settings_toggle_rect(const Rect &c) {
-    Rect r = { c.x + 8, c.y + 34, 96, 22 };
+// ---------------- keyboard shortcuts ----------------
+
+static bool shell_key(const kian_event_t *e) {
+    int a = e->a, b = e->b, c = e->c;
+    bool ctrl = (c & 2) != 0, alt = (c & 4) != 0, shift = (c & 1) != 0, win = (c & 8) != 0;
+
+    // emergency exit: Ctrl+Alt+Q
+    if (ctrl && alt && (b == 'q' || b == 'Q')) {
+        SH->running = false;
+        return true;
+    }
+    // lock: Win+L or Ctrl+Alt+L
+    if ((win && (b == 'l' || b == 'L')) || (ctrl && alt && (b == 'l' || b == 'L'))) {
+        SH->lock_pending = true;
+        return true;
+    }
+    // Ctrl+Shift+Esc -> Task Manager
+    if (ctrl && shift && a == KIAN_KEY_ESC) {
+        app_open(APP_TASKMGR);
+        return true;
+    }
+    // Ctrl+Alt+Del screen
+    if (ctrl && alt && a == KIAN_KEY_DEL) {
+        SH->ctrldel = true;
+        return true;
+    }
+    // Alt+Tab switcher
+    if (alt && a == KIAN_KEY_TAB) {
+        alttab_cycle(SH->desk.cur_desk);
+        return true;
+    }
+    // Win+Tab -> task view
+    if (win && a == KIAN_KEY_TAB) {
+        SH->desk.taskview = !SH->desk.taskview;
+        return true;
+    }
+    // Ctrl+Win+Left/Right -> virtual desktops
+    if (ctrl && win && a == KIAN_KEY_LEFT) { desk_switch(&SH->desk, -1); return true; }
+    if (ctrl && win && a == KIAN_KEY_RIGHT) { desk_switch(&SH->desk, 1); return true; }
+    // Win+R -> Run
+    if (win && (b == 'r' || b == 'R')) {
+        SH->run_open = true;
+        tbox_init(&SH->run_box, 0, 0, 340, 28, false);
+        tbox_focus(&SH->run_box, true);
+        return true;
+    }
+    // Win+D -> show desktop / restore
+    static bool desk_min = false;
+    if (win && (b == 'd' || b == 'D')) {
+        if (desk_min) wm_restore_all(&SH->wm, SH->desk.cur_desk);
+        else wm_minimize_all(&SH->wm, SH->desk.cur_desk);
+        desk_min = !desk_min;
+        return true;
+    }
+    // Win+Arrows -> snap
+    if (win && a == KIAN_KEY_LEFT && wm_focused(&SH->wm)) {
+        Window *w = wm_focused(&SH->wm);
+        w->rx = w->x; w->ry = w->y; w->rw = w->w; w->rh = w->h;
+        Rect r = wm_snap_rect(1, GFX->w, GFX->h);
+        w->x = r.x; w->y = r.y; w->w = r.w; w->h = r.h;
+        w->dirty = true;
+        return true;
+    }
+    if (win && a == KIAN_KEY_RIGHT && wm_focused(&SH->wm)) {
+        Window *w = wm_focused(&SH->wm);
+        w->rx = w->x; w->ry = w->y; w->rw = w->w; w->rh = w->h;
+        Rect r = wm_snap_rect(2, GFX->w, GFX->h);
+        w->x = r.x; w->y = r.y; w->w = r.w; w->h = r.h;
+        w->dirty = true;
+        return true;
+    }
+    if (win && a == KIAN_KEY_UP && wm_focused(&SH->wm)) {
+        wm_toggle_max(wm_focused(&SH->wm), GFX->w, GFX->h);
+        return true;
+    }
+    // Alt+Shift -> ENG/FA tray label (label only)
+    if (alt && shift) {
+        SH->desk.lang_fa = !SH->desk.lang_fa;
+        return false;
+    }
+    return false;
+}
+
+// ---------------- redraw ----------------
+
+static Rect screen_rect() {
+    Rect r = { 0, 0, GFX->w, GFX->h };
     return r;
 }
 
-// ---------- gui_main ----------
+static void apply_screen_overlays(Rect r) {
+    // brightness dimming
+    int dim = ((100 - SH->desk.brightness) * 180) / 100;
+    if (dim > 0) blend_rect(r.x, r.y, r.w, r.h, 0x00000000, iclamp(dim, 0, 180));
+    // night light: warm tint
+    if (SH->desk.night) blend_rect(r.x, r.y, r.w, r.h, 0x00A06010, 36);
+}
 
-extern "C" int gui_main(const kian_fb_t *fb) {
-    if (fb->bpp != 32) return 1; // GUI needs 32bpp; console stays usable
+static void mark_region(Rect r) {
+    // repaint everything that intersects r, then present exactly r
+    Rect wr = r;
+    wr.x -= 8; wr.y -= 8; wr.w += 16; wr.h += 16;
 
-    Surface s;
-    s.w = (int)fb->width;
-    s.h = (int)fb->height;
-    s.buf = (uint32_t *)kian_alloc((size_t)s.w * (size_t)s.h * 4, 16);
-    if (s.buf == 0) return 1;
+    // wallpaper behind the region
+    gradient_v(wr.x, wr.y, wr.w, wr.h, THEME->wallpaper_top, THEME->wallpaper_bottom);
 
-    Theme *th = new Theme();
-    theme_dark(*th);
-
-    WM *wm = new WM();
-    CalcState *calc = new CalcState();
-    Str *term = new Str();
-    Str *notes = new Str();
-
-    int cur_x = s.w / 2, cur_y = s.h / 2;
-    bool menu_open = false;
-    int drag_id = -1, drag_offx = 0, drag_offy = 0;
-    bool pressed = false;
-    int last_second = -1;
-    bool running = true;
-
-    term->append("Kian OS terminal - type, ESC exits GUI\n");
-    term->append("kian@kian-os:~$ ");
-
-    while (running) {
-        bool activity = false;
-
-        // ---- events ----
-        kian_event_t ev;
-        while (kian_poll_event(&ev)) {
-            activity = true;
-            if (ev.type == KIAN_EV_KEY_DOWN) {
-                if (ev.b == 27) { running = false; break; } // ESC always exits
-                if (wm->count() == 0) continue;
-                Window &top = wm->at(wm->count() - 1);
-                if (top.minimized) continue;
-                if (top.type == APP_TERM) {
-                    if (ev.b == '\b') term->backspace();
-                    else if (ev.b == '\n') term->append("\nkian@kian-os:~$ ");
-                    else if (ev.b >= 32 && ev.b < 127) term->append((char)ev.b);
-                } else if (top.type == APP_NOTES) {
-                    if (ev.b == '\b') notes->backspace();
-                    else if (ev.b == '\n' || (ev.b >= 32 && ev.b < 127)) notes->append((char)ev.b);
-                } else if (top.type == APP_CALC) {
-                    if (ev.b >= '0' && ev.b <= '9') calc->digit((char)ev.b);
-                    else if (ev.b == '+') calc->set_op(1);
-                    else if (ev.b == '-') calc->set_op(2);
-                    else if (ev.b == '*') calc->set_op(3);
-                    else if (ev.b == '/') calc->set_op(4);
-                    else if (ev.b == '\n' || ev.b == '=') { calc->apply_op(); calc->op = 0; }
-                }
-            } else if (ev.type == KIAN_EV_MOUSE_MOVE) {
-                // 2x acceleration via 16.16 fixed point (integer only)
-                int32_t dx = (int32_t)fx_mul(fx_from_int(ev.a), fx_from_int(2)) >> 16;
-                int32_t dy = (int32_t)fx_mul(fx_from_int(ev.b), fx_from_int(2)) >> 16;
-                cur_x += dx;
-                cur_y += dy;
-                if (cur_x < 0) cur_x = 0;
-                if (cur_y < 0) cur_y = 0;
-                if (cur_x >= s.w) cur_x = s.w - 1;
-                if (cur_y >= s.h) cur_y = s.h - 1;
-                if (drag_id >= 0) {
-                    Window *w = wm->find(drag_id);
-                    if (w != 0) {
-                        w->x = cur_x - drag_offx;
-                        w->y = cur_y - drag_offy;
-                        if (w->x < -w->w + 40) w->x = -w->w + 40;
-                        if (w->x > s.w - 40) w->x = s.w - 40;
-                        if (w->y < 0) w->y = 0;
-                        if (w->y > s.h - TB_H - TITLE_H) w->y = s.h - TB_H - TITLE_H;
-                    }
-                }
-            } else if (ev.type == KIAN_EV_MOUSE_BTN) {
-                bool left = (ev.a & 1) != 0;
-                if (left && !pressed) {
-                    pressed = true;
-                    activity = true;
-                    if (menu_open) {
-                        int item = start_menu_item_at(cur_x, cur_y);
-                        if (item == 0) { wm->open(APP_TERM, "Terminal", 420, 260, s.w); menu_open = false; }
-                        else if (item == 1) { wm->open(APP_FILES, "Files", 380, 240, s.w); menu_open = false; }
-                        else if (item == 2) { wm->open(APP_SETTINGS, "Settings", 360, 220, s.w); menu_open = false; }
-                        else if (item == 3) { wm->open(APP_CALC, "Calculator", 200, 220, s.w); menu_open = false; }
-                        else if (item == 4) { running = false; break; } // Exit to console
-                        else if (item == 5) { kian_reboot(); }
-                        else if (item == 6) { kian_shutdown(); }
-                        else if (item < 0) menu_open = false;
-                    } else {
-                        Rect sb = start_button_rect();
-                        if (cur_x >= sb.x && cur_x < sb.x + sb.w && cur_y >= sb.y && cur_y < sb.y + sb.h) {
-                            menu_open = !menu_open;
-                        } else if (cur_y >= s.h - TB_H) {
-                            for (int i = 0; i < PIN_COUNT; i++) {
-                                Rect r = taskbar_icon_rect(i);
-                                if (cur_x >= r.x && cur_x < r.x + r.w && cur_y >= r.y && cur_y < r.y + r.h) {
-                                    Window *w = wm->find_type(PIN_TYPE[i]);
-                                    if (w != 0 && w->minimized) { wm->restore(w); wm->raise(w->id); }
-                                    else if (w != 0) wm->raise(w->id);
-                                    break;
-                                }
-                            }
-                        } else {
-                            Window *w = wm->topmost_at(cur_x, cur_y);
-                            if (w != 0) {
-                                wm->raise(w->id);
-                                int btn = wm->button_at(*w, cur_x, cur_y);
-                                if (btn == BTN_CLOSE) wm->close(w->id);
-                                else if (btn == BTN_MIN) w->minimized = true;
-                                else if (btn == BTN_MAX) {
-                                    if (w->maximized) {
-                                        w->maximized = false;
-                                        w->x = w->prev_x; w->y = w->prev_y;
-                                        w->w = w->prev_w; w->h = w->prev_h;
-                                    } else {
-                                        w->prev_x = w->x; w->prev_y = w->y;
-                                        w->prev_w = w->w; w->prev_h = w->h;
-                                        w->maximized = true;
-                                        w->x = 0; w->y = 0;
-                                        w->w = s.w; w->h = s.h - TB_H;
-                                    }
-                                } else if (wm->title_hit(*w, cur_x, cur_y)) {
-                                    drag_id = w->id;
-                                    drag_offx = cur_x - w->x;
-                                    drag_offy = cur_y - w->y;
-                                } else if (w->type == APP_SETTINGS) {
-                                    Rect c = wm->content_rect(*w, s.w, s.h);
-                                    Rect tr = settings_toggle_rect(c);
-                                    if (cur_x >= tr.x && cur_x < tr.x + tr.w && cur_y >= tr.y && cur_y < tr.y + tr.h) {
-                                        Theme old = *th;
-                                        if (th->taskbar_bg == 0x00101828) theme_light(*th); else theme_dark(*th);
-                                        (void)old;
-                                    }
-                                } else if (w->type == APP_CALC) {
-                                    Rect c = wm->content_rect(*w, s.w, s.h);
-                                    int bidx = calc_button_at(c, cur_x, cur_y);
-                                    if (bidx >= 0) calc_press(*calc, bidx);
-                                }
-                            }
-                        }
-                    }
-                } else if (!left && pressed) {
-                    pressed = false;
-                    drag_id = -1;
-                }
-            }
-        }
-        if (!running) break;
-
-        // ---- clock: redraw once per second even without input ----
-        kian_time_t now;
-        kian_time_now(&now);
-        bool new_second = (now.second != last_second);
-        if (new_second) last_second = now.second;
-
-        // ---- draw ----
-        if (activity || new_second) {
-            draw_wallpaper(s, *th);
-            for (int i = 0; i < wm->wins.size(); i++) {
-                wm->draw_one(s, *th, i, s.w, s.h);
-                Window &w = wm->at(i);
-                if (w.minimized) continue;
-                Rect c = wm->content_rect(w, s.w, s.h);
-                if (w.type == APP_TERM) {
-                    draw_text_buffer(s, c, *th, *term);
-                } else if (w.type == APP_NOTES) {
-                    draw_text_buffer(s, c, *th, *notes);
-                } else if (w.type == APP_FILES) {
-                    draw_text(s, c.x + 8, c.y + 8, "Files: no filesystem mounted yet (partly working)", th->text, 1);
-                } else if (w.type == APP_SETTINGS) {
-                    draw_text(s, c.x + 8, c.y + 8, "Time zone: Asia/Tehran (UTC+03:30), no DST", th->text, 1);
-                    draw_text(s, c.x + 8, c.y + 20, "Theme toggle:", th->text, 1);
-                    Rect tr = settings_toggle_rect(c);
-                    fill_round_rect(s, tr.x, tr.y, tr.w, tr.h, 3, th->button_bg);
-                    draw_text(s, tr.x + 6, tr.y + 7, "Dark / Light", th->button_fg, 1);
-                } else if (w.type == APP_CALC) {
-                    draw_calc(s, c, *th, *calc);
-                } else if (w.type == APP_ABOUT) {
-                    draw_text(s, c.x + 8, c.y + 8, "Kian OS 0.3.0 \"Horizon\"", th->text, 1);
-                    draw_text(s, c.x + 8, c.y + 20, "Rust kernel + C console + C++ GUI", th->text, 1);
-                    draw_text(s, c.x + 8, c.y + 32, "(c) kiantaei", th->text, 1);
-                }
-            }
-
-            draw_taskbar(s, *th, *wm, menu_open);
-            if (menu_open) draw_start_menu(s, *th, -1);
-            draw_cursor(s, cur_x, cur_y);
-
-            // ---- present: copy back buffer to the real framebuffer ----
-            uint8_t *dst = (uint8_t *)(uintptr_t)fb->addr;
-            for (int y = 0; y < s.h; y++) {
-                memcpy(dst + (size_t)y * fb->pitch, s.buf + (size_t)y * s.w, (size_t)s.w * 4);
-            }
-        } else {
-            // idle: cap the work so we do not busy-flood
-            for (int i = 0; i < 200; i++) kpause();
+    // desktop icons
+    for (int i = 0; i < 4; i++) {
+        Rect ir = { 12, 12 + i * 96, 76, 88 };
+        if (rect_overlap(ir, wr)) {
+            clip_set(wr);
+            desk_draw_icons(&SH->desk);
+            clip_reset();
+            break;
         }
     }
 
-    delete calc;
-    delete notes;
-    delete term;
-    delete wm;
-    delete th;
-    kian_free(s.buf);
-    return 0;
+    // windows bottom -> top (full window draw is deterministic; only r is presented)
+    for (int i = 0; i < SH->wm.order_n; i++) {
+        Window *w = &SH->wm.win[SH->wm.order[i]];
+        if (!w->used || w->desk_id != SH->desk.cur_desk || w->state == WS_MIN) continue;
+        Rect wr2 = { w->x, w->y, w->w, w->h };
+        if (rect_overlap(wr2, wr)) wm_draw_one(&SH->wm, w);
+    }
+
+    // taskbar if touched
+    Rect tb = { 0, GFX->h - 48, GFX->w, 48 };
+    if (rect_overlap(tb, wr)) {
+        taskbar_draw(&SH->desk);
+        if (r.y + r.h > GFX->h - 48) r.h = GFX->h - r.y; // present down to screen bottom
+    }
+
+    apply_screen_overlays(r);
+    present(r.x, r.y, r.w, r.h);
+    scene_snap_rect(r.x, r.y, r.w, r.h);
+}
+
+static void redraw_all() {
+    clip_reset();
+    desk_draw_wallpaper(&SH->desk);
+    desk_draw_icons(&SH->desk);
+    wm_draw_all(&SH->wm, SH->desk.cur_desk);
+    taskbar_draw(&SH->desk);
+    if (SH->desk.start_open) start_menu_draw(&SH->desk);
+    if (SH->desk.quick_open) quick_draw(&SH->desk);
+    if (SH->desk.cal_open) cal_draw(&SH->desk);
+    if (SH->desk.toast_on) toast_draw(&SH->desk);
+    if (SH->desk.taskview) taskview_draw(&SH->desk);
+    if (SH->ctrldel) draw_ctrldel();
+    if (SH->run_open) draw_run();
+    if (SH->alttab) draw_alttab(SH->desk.cur_desk);
+    if (SH->wm.snap_zone != 0) {
+        Rect pr = wm_snap_rect(SH->wm.snap_zone, GFX->w, GFX->h);
+        blend_rect(pr.x, pr.y, pr.w, pr.h, THEME->accent, 90);
+        rect_outline(pr.x, pr.y, pr.w, pr.h, THEME->accent);
+    }
+    apply_screen_overlays(screen_rect());
+    scene_snap_all();
+    present(0, 0, GFX->w, GFX->h);
+    cursor_reset_anchor();
+    cursor_present();
+    SH->need_full = false;
+    SH->taskbar_dirty = false;
+    SH->clock_second = 0xFFFFFFFF;
+    for (int i = 0; i < WM_MAX_WINDOWS; i++) SH->wm.win[i].dirty = false;
+}
+
+// ---------------- main ----------------
+
+extern "C" int gui_main(const kian_fb_t *fb) {
+    // Emergency check: GUI needs >= 800x600 at 32 bpp
+    if (fb->bpp != 32 || fb->width < 800 || fb->height < 600) {
+        kprintf("GUI: needs >= 800x600 at 32bpp (got %lux%lu bpp=%lu)\n",
+                (unsigned long)fb->width, (unsigned long)fb->height, (unsigned long)fb->bpp);
+        return 1;
+    }
+
+    // G1: gfx core (frame + scene). Check the heap had room.
+    if (!gfx_init(fb)) {
+        kprintf("GUI: out of memory (frame + scene buffers)\n");
+        return 1;
+    }
+    slog("GUI: step G1 ok (gfx)\n");
+
+    Shell *sh = new Shell();
+    if (!sh) {
+        kprintf("GUI: out of memory (shell)\n");
+        gfx_free();
+        return 1;
+    }
+    SH = sh;
+    theme_set(&sh->theme, true, 0x0078D4);
+    THEME = &sh->theme;
+    input_init(&sh->input);
+    sh->menu.open = false;
+    slog("GUI: step G2 ok (input/cursor)\n");
+
+    ramfs_init();
+    slog("GUI: step G3 ok (ramfs)\n");
+
+    wm_init(&sh->wm);
+    slog("GUI: step G4 ok (wm)\n");
+
+    desk_init(&sh->desk, &sh->wm);
+    sh->wm.cur_desk = 0;
+    slog("GUI: step G5 ok (desktop shell)\n");
+
+    if (!login_run(GUI_REQUIRES_LOGIN)) {
+        delete sh;
+        SH = 0;
+        THEME = 0;
+        gfx_free();
+        return 0;
+    }
+    slog("GUI: step G6 ok (login path)\n");
+
+    toast_show(&sh->desk, "Welcome kian");
+    sh->running = true;
+    sh->need_full = true;
+    sh->taskbar_dirty = false;
+    sh->clock_second = 0xFFFFFFFF;
+
+    int exit_code = 0;
+    while (sh->running) {
+        // ---- events ----
+        for (;;) {
+            kian_event_t ev;
+            if (!input_next(&sh->input, &ev)) break;
+
+            bool consumed = false;
+            if (ev.type == KIAN_EV_KEY_DOWN) consumed = shell_key(&ev);
+            if (!consumed && ev.type == KIAN_EV_KEY_UP && sh->alttab && (ev.c & 4) == 0) {
+                alttab_commit(sh->desk.cur_desk);
+                consumed = true;
+            }
+
+            if (!consumed && sh->menu.open) consumed = menu_event(&sh->menu, &ev);
+            if (!consumed && sh->run_open) consumed = run_event(&ev);
+            if (!consumed && sh->ctrldel) consumed = ctrldel_event(&ev);
+            if (!consumed && sh->desk.taskview) consumed = taskview_event(&sh->desk, &ev);
+            if (!consumed && sh->desk.start_open) consumed = start_menu_event(&sh->desk, &ev);
+            if (!consumed && sh->desk.quick_open) consumed = quick_event(&sh->desk, &ev);
+            if (!consumed && sh->desk.cal_open) consumed = cal_event(&sh->desk, &ev);
+
+            if (!consumed && (ev.type == KIAN_EV_MOUSE_MOVE || ev.type == KIAN_EV_MOUSE_BTN || ev.type == KIAN_EV_MOUSE_WHEEL)) {
+                consumed = taskbar_event(&sh->desk, &ev);
+                if (!consumed && ev.type != KIAN_EV_MOUSE_MOVE && sh->input.my < GFX->h - 48) {
+                    consumed = desk_event(&sh->desk, &ev);
+                }
+                if (!consumed) consumed = wm_mouse(&sh->wm, &ev);
+            }
+
+            if (!consumed && ev.type == KIAN_EV_KEY_DOWN && (ev.a == KIAN_KEY_ESC || ev.b == 27)) {
+                sh->running = false; // ESC exits the GUI (emergency exit #2)
+                break;
+            }
+
+            if (!consumed) {
+                Window *fw = wm_focused(&sh->wm);
+                if (fw && fw->desk_id == sh->desk.cur_desk && fw->state != WS_MIN && fw->event) {
+                    Rect c2 = wm_content(fw);
+                    clip_set(c2);
+                    fw->event(fw->inst, &ev, c2);
+                    clip_reset();
+                    fw->dirty = true;
+                }
+            }
+
+            if (consumed) sh->need_full = true;
+            if (ev.type == KIAN_EV_MOUSE_MOVE) {
+                if (!sh->need_full && !sh->wm.dragging && sh->wm.resize_mode == 0) {
+                    cursor_move_redraw();
+                }
+            }
+            if (!sh->running) break;
+        }
+        if (!sh->running) break;
+
+        // ---- clock + toast ticks ----
+        kian_time_t now;
+        kian_time_now(&now);
+        if ((unsigned)now.second != sh->clock_second) {
+            sh->taskbar_dirty = true;
+            sh->clock_second = (unsigned)now.second;
+        }
+        bool toast_was = sh->desk.toast_on;
+        toast_tick(&sh->desk);
+        if (toast_was && !sh->desk.toast_on) {
+            Rect tr = toast_region(&sh->desk);
+            mark_region(tr);
+        }
+        if (sh->desk.exit_gui) {
+            sh->running = false; // "Exit to console" (emergency exit #3)
+            break;
+        }
+        if (sh->lock_pending) {
+            sh->lock_pending = false;
+            login_lock();
+            sh->need_full = true;
+        }
+
+        // ---- redraw ----
+        if (sh->need_full) {
+            redraw_all();
+        } else {
+            for (int i = 0; i < WM_MAX_WINDOWS; i++) {
+                Window *w = &sh->wm.win[i];
+                if (w->used && w->dirty && w->desk_id == sh->desk.cur_desk && w->state != WS_MIN) {
+                    mark_region(wm_content(w));
+                    w->dirty = false;
+                }
+            }
+            if (sh->taskbar_dirty) {
+                taskbar_draw(&sh->desk);
+                Rect tb = { 0, GFX->h - 48, GFX->w, 48 };
+                apply_screen_overlays(tb);
+                present(tb.x, tb.y, tb.w, tb.h);
+                scene_snap_rect(tb.x, tb.y, tb.w, tb.h);
+                cursor_present();
+                sh->taskbar_dirty = false;
+            }
+        }
+
+        // ---- idle: low CPU, small spin between frames ----
+        unsigned t0 = now_ms();
+        while (now_ms() - t0 < 8) {
+            __asm__ volatile("pause");
+        }
+    }
+
+    exit_code = 0; // Ctrl+Alt+Q / ESC / "Exit to console" all return 0
+    // cleanup: destroy all app instances, then the shell
+    for (int i = 0; i < WM_MAX_WINDOWS; i++) {
+        Window *w = &sh->wm.win[i];
+        if (w->used && w->destroy && w->inst) w->destroy(w->inst);
+        w->inst = 0;
+        w->used = false;
+    }
+    delete sh;
+    SH = 0;
+    THEME = 0;
+    gfx_free();
+    return exit_code;
 }

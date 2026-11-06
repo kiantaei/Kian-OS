@@ -19,7 +19,7 @@ Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox)
 | **KERNEL** | Rust (`kernel/`, staticlib, x86_64-unknown-none) | boot flow, serial, heap/memory, PS/2 keyboard+mouse polling, RTC + Asia/Tehran time, password check, power control; net/scheduler/etc. kept but OFF by constants |
 | **BOOT GLUE** | C (`boot/`) | official Limine requests (`limine.h` from the v8.x-binary checkout) + boot info + C++ ctor runner |
 | **CONSOLE** | C (`console/`) | framebuffer text console, 8x8 font, minimal printf + libc, login prompt, `ksh` shell |
-| **GUI** | C++ (`gui/`) | desktop, window manager, taskbar, start menu, cursor, apps — started ONLY by typing `gui` in ksh |
+| **GUI** | C++ (`gui/`, `gui/apps/`) | desktop, window manager, 48px taskbar, start menu, quick settings, calendar, toasts, task view, login/lock screen, apps — autostarts after ksh login (AUTOSTART_GUI in shell.c); `gui` in ksh still works, ESC / Ctrl+Alt+Q / "Exit to console" return to ksh |
 
 `include/kian_abi.h` is the single contract between the three languages.
 
@@ -28,8 +28,9 @@ Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox)
 kian-os/
 ├── include/kian_abi.h   # shared C header (the ABI contract)
 ├── boot/limine_requests.c  # official Limine requests + kian_boot_info()/kian_run_ctors()
-├── console/             # C: console.c, font8x8.c, printf.c, libc_min.c, shell.c
-├── gui/                 # C++: gui.cpp, gfx.cpp, wm.cpp, desktop.cpp, runtime.cpp (+ .h)
+├── console/             # C: console.c, font8x8.c, printf.c, libc_min.c, shell.c (AUTOSTART_GUI)
+├── gui/                 # C++ desktop: gfx, icons, input+cursor, widgets, wm, desktop shell,
+│                        # login/lock, ramfs, gui.cpp orchestrator, apps/ (9 apps)
 ├── kernel/              # Rust kernel (no_std, x86_64-unknown-none, staticlib)
 │   ├── linker.ld        # kernel linker script (ENTRY(_start) first, base 0xffffffff80000000)
 │   └── src/             # lib.rs (_start + ABI exports), input.rs, time.rs, memory/heap.rs,
@@ -51,10 +52,20 @@ In VMware: boot the ISO, watch the serial console (COM1, 115200 8N1) or the scre
 - **M1 boot -> blue screen + banner from the C console: done**
 - **M2 keyboard typing in ksh: done** (PS/2 set-1 polling, shift/caps/ctrl/alt)
 - **M3 login kian/kian + `date` (Asia/Tehran): done**
-- **M4 `gui` starts the C++ desktop; ESC / "Exit to console" returns to ksh: done**
-- Partly working:
-  - `passwd` in ksh is a stub (does not change the stored hash yet)
-  - GUI "Files" app shows a placeholder (no filesystem mounted yet)
-  - `kian_uptime_ms` uses the TSC with a ~2 GHz fallback calibration (PIT calibration pending ENABLE_PIT)
-  - GUI mouse uses PS/2 relative packets; VMware absolute (vmmouse) is a kernel driver kept but off
-  - GDT/IDT/APIC/PIT/HPET/NET/SCHED are implemented but OFF by stage constants
+- **M4 GUI desktop autostarts after login; ESC / Ctrl+Alt+Q / "Exit to console" return to ksh: done**
+
+### GUI (C++) status — honest table
+| Milestone | Status |
+|---|---|
+| G0 kernel side: extended keys (0xE0 prefix), modifiers incl. Win, mouse wheel (IntelliMouse), non-blocking poll (max 32 bytes/call), kian_mem_stats | **Fully working** |
+| G1 gfx core: frame+scene buffers, primitives, alpha blend, gradients, dirty-rect present (`rep movsd`), soft shadows | **Fully working** |
+| G2 input: mouse pos/edges, double-click, drag, hover, 12x19 cursor with scene-restore trick | **Fully working** |
+| G3 widgets: Button/Label/TextBox/Checkbox/Slider/ListView/ScrollBar/Menu/Tooltip/TabBar | **Fully working** |
+| G4 window manager: 32-window pool, drag, resize (8px), snap with preview, min/max/close, focus ring, Alt+Tab | **Fully working** (open animation = fade only) |
+| G5 desktop: wallpapers, desktop icons, 48px acrylic taskbar, start menu with search filter, quick settings, calendar flyout, toasts, task view, 2 virtual desktops | **Fully working** (task-view thumbnails are simplified previews, not real content) |
+| G6 login/lock screen: big clock, avatar, password box, shake on wrong password, Win+L / Ctrl+Alt+L | **Fully working** (GUI_REQUIRES_LOGIN=false: no double login) |
+| G7 apps: Terminal, Files, Notepad, Calculator, Settings, Task Manager, Paint, Browser (placeholder), Run dialog | **Fully working**; RAM fs is volatile (stated in UI + README); Browser is an honest placeholder |
+| G8 polish: Win+D, Win+Arrow snap, Ctrl+Alt+Del screen, tooltips, dirty-rect redraw, idle spin | **Fully working** |
+| G9 VMware absolute mouse (backdoor 0x5658) | **Not done** (PS/2 relative mouse + 2x accel) |
+| ksh `passwd` change | **Partly working** (stub) |
+| `kian_uptime_ms` calibration | **Partly working** (TSC @ ~2GHz fallback; PIT calibration pending) |

@@ -187,6 +187,30 @@ pub fn kian_free(p: *mut u8) {
     unsafe { HEAP.lock().free(p) }
 }
 
+/// ABI: void kian_mem_stats(uint64_t *used, uint64_t *total)
+/// Walks the block list and sums used block sizes. Never blocks for long.
+pub fn stats() -> (u64, u64) {
+    let h = HEAP.lock();
+    if !h.ready || h.base == 0 {
+        return (0, 0);
+    }
+    unsafe {
+        let mut used: u64 = 0;
+        let mut cur = h.base;
+        while cur + HDR_SIZE <= h.end {
+            let bsize = HeapState::read_u64(cur) as usize;
+            if bsize < HDR_SIZE || cur + bsize > h.end {
+                break; // corrupted header; report what we have
+            }
+            if HeapState::read_u64(cur + 8) & 1 == 1 {
+                used += bsize as u64;
+            }
+            cur += bsize;
+        }
+        (used, (h.end - h.base) as u64)
+    }
+}
+
 #[alloc_error_handler]
 fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
     crate::panic::halt(&format!("heap allocation error: {:?}", layout));

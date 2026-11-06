@@ -1,10 +1,12 @@
 use x86_64::instructions::port::Port;
 
 /* PS/2 keyboard + mouse POLLING (no interrupts, ports 0x60/0x64).
- * Keyboard: set 1 scancodes (i8042 translation enabled), shift/ctrl/alt and
- * caps tracking, E0-prefixed keys. Mouse: 3-byte packets, AUX bit (bit 5 of
- * port 0x64) decides which byte stream a byte belongs to, enable sequence
- * 0xA8, 0x20/0x60 config, 0xD4 0xF4. */
+ * Keyboard: set 1 scancodes (i8042 translation enabled), shift/ctrl/alt/win
+ * and caps tracking, E0-prefixed extended keys mapped to KIAN_KEY_* codes.
+ * Mouse: 3-byte packets, AUX bit (bit 5 of port 0x64) decides which byte
+ * stream a byte belongs to; IntelliMouse wheel unlock (rates 200/100/80 then
+ * read id) switches to 4-byte packets with a wheel delta when supported.
+ * enable sequence 0xA8, 0x20/0x60 config, unlock, 0xD4 0xF4. */
 
 use crate::KianEvent;
 
@@ -13,15 +15,35 @@ pub const EV_KEY_DOWN: i32 = 1;
 pub const EV_KEY_UP: i32 = 2;
 pub const EV_MOUSE_MOVE: i32 = 3;
 pub const EV_MOUSE_BTN: i32 = 4;
+pub const EV_MOUSE_WHEEL: i32 = 5;
+
+/* mirrors of the KIAN_KEY_* enum in include/kian_abi.h */
+pub const K_UP: i32 = 0x100;
+pub const K_DOWN: i32 = 0x101;
+pub const K_LEFT: i32 = 0x102;
+pub const K_RIGHT: i32 = 0x103;
+pub const K_HOME: i32 = 0x104;
+pub const K_END: i32 = 0x105;
+pub const K_DEL: i32 = 0x106;
+pub const K_PGUP: i32 = 0x107;
+pub const K_PGDN: i32 = 0x108;
+pub const K_F1: i32 = 0x110;
+pub const K_WIN: i32 = 0x120;
+pub const K_ESC: i32 = 0x121;
+pub const K_TAB: i32 = 0x122;
+pub const K_ENTER: i32 = 0x123;
+pub const K_BACKSPACE: i32 = 0x124;
 
 const QLEN: usize = 128;
+const DRAIN_MAX: usize = 32; // kian_poll_event NEVER blocks; drains at most 32 bytes per call
 
 static mut INITED: bool = false;
-static mut MODS: i32 = 0; // 1=shift, 2=ctrl, 4=alt
+static mut MODS: i32 = 0; // 1=shift, 2=ctrl, 4=alt, 8=win
 static mut CAPS: bool = false;
 static mut EXT: bool = false; // E0 prefix pending
+static mut WHEEL_MODE: bool = false; // IntelliMouse 4-byte packets
 static mut MIDX: usize = 0;
-static mut MPKT: [u8; 3] = [0; 3];
+static mut MPKT: [u8; 4] = [0; 4];
 static mut LAST_BTN: i32 = 0;
 static mut Q: [KianEvent; QLEN] = [KianEvent { kind: 0, a: 0, b: 0, c: 0 }; QLEN];
 static mut QHEAD: usize = 0;
@@ -42,6 +64,68 @@ fn io_wait() {
     out_p(0x80, 0);
 }
 
+/* wait until the controller input buffer (bit 1) is free, bounded */
+unsafe fn wait_write() {
+    for _ in 0..100_000 {
+        if in_p(0x64) & 2 == 0 {
+            return;
+        }
+    }
+}
+
+/* wait for output data (bit 0) with timeout; true if a byte is waiting */
+unsafe fn wait_read() -> bool {
+    for _ in 0..100_000 {
+        if in_p(0x64) & 1 != 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/* send a command to the AUX device (0xD4 prefix) and swallow its ACK */
+unsafe fn mouse_cmd(cmd: u8) {
+    wait_write();
+    out_p(0x64, 0xD4);
+    io_wait();
+    wait_write();
+    out_p(0x60, cmd);
+    io_wait();
+    // swallow the 0xFA acknowledge so it never reaches the packet parser
+    for _ in 0..1000 {
+        if in_p(0x64) & 1 == 0 {
+            return;
+        }
+        let _ = in_p(0x60);
+    }
+}
+
+/* IntelliMouse unlock: rates 200, 100, 80 then read the device id.
+ * Returns true if the device answered id 3 (wheel present). */
+unsafe fn mouse_try_wheel() -> bool {
+    mouse_cmd(0xF5); // disable data reporting while configuring
+    mouse_cmd(0xF3);
+    mouse_cmd(200);
+    mouse_cmd(0xF3);
+    mouse_cmd(100);
+    mouse_cmd(0xF3);
+    mouse_cmd(80);
+    mouse_cmd(0xF2); // read id
+    let mut id: u8 = 0;
+    // swallow ACK, then read the id byte
+    for _ in 0..1000 {
+        if in_p(0x64) & 1 == 0 {
+            break;
+        }
+        let _ = in_p(0x60);
+    }
+    if wait_read() {
+        id = in_p(0x60);
+    }
+    mouse_cmd(0xF4); // (re)enable data reporting
+    id == 3
+}
+
 unsafe fn ps2_init() {
     // drain output buffers
     for _ in 0..64 {
@@ -59,9 +143,12 @@ unsafe fn ps2_init() {
     let cfg = (cfg | 0x03) & !0x30;
     out_p(0x64, 0x60); io_wait();
     out_p(0x60, cfg); io_wait();
-    // enable mouse data reporting
-    out_p(0x64, 0xD4); io_wait();
-    out_p(0x60, 0xF4); io_wait();
+    // IntelliMouse wheel probe; keeps 3-byte packets when unsupported
+    if mouse_try_wheel() {
+        WHEEL_MODE = true;
+    }
+    MIDX = 0;
+    EXT = false;
     INITED = true;
 }
 
@@ -130,10 +217,10 @@ unsafe fn kbd_byte(code: u8) {
     }
     let release = code & 0x80 != 0;
     let real = code & 0x7F;
-    let _ = EXT; // extended keys use the same modifier handling
+    let ext = EXT;
     EXT = false;
 
-    // update modifiers (left+right share bits)
+    // update modifiers (left+right share bits; win keys are E0-prefixed)
     match real {
         0x2A | 0x36 => {
             if release { MODS &= !1; } else { MODS |= 1; }
@@ -144,21 +231,55 @@ unsafe fn kbd_byte(code: u8) {
         0x38 => {
             if release { MODS &= !4; } else { MODS |= 4; }
         }
+        0x5B | 0x5C if ext => {
+            if release { MODS &= !8; } else { MODS |= 8; }
+        }
         0x3A => {
             if !release { CAPS = !CAPS; }
         }
         _ => {}
     }
 
-    if release {
-        push(EV_KEY_UP, real as i32, 0, MODS);
+    // pick (special key code, ascii). kcode == 0 -> plain scancode in a.
+    let (kcode, ascii) = if ext {
+        match real {
+            0x48 => (K_UP, 0),
+            0x50 => (K_DOWN, 0),
+            0x4B => (K_LEFT, 0),
+            0x4D => (K_RIGHT, 0),
+            0x47 => (K_HOME, 0),
+            0x4F => (K_END, 0),
+            0x53 => (K_DEL, 0),
+            0x49 => (K_PGUP, 0),
+            0x51 => (K_PGDN, 0),
+            0x5B | 0x5C => (K_WIN, 0),
+            0x1C => (K_ENTER, b'\n' as i32), // keypad Enter
+            0x35 => (0, b'/' as i32),        // keypad slash
+            _ => (0, 0),
+        }
     } else {
-        let ascii = map_ascii(real, MODS & 1 != 0, CAPS) as i32;
-        push(EV_KEY_DOWN, real as i32, ascii, MODS);
+        match real {
+            0x01 => (K_ESC, 27),
+            0x0E => (K_BACKSPACE, 8),
+            0x0F => (K_TAB, b'\t' as i32),
+            0x1C => (K_ENTER, b'\n' as i32),
+            0x3B..=0x44 => (K_F1 + (real - 0x3B) as i32, 0), // F1..F10
+            0x57 => (K_F1 + 10, 0),                          // F11
+            0x58 => (K_F1 + 11, 0),                          // F12
+            _ => (0, map_ascii(real, MODS & 1 != 0, CAPS) as i32),
+        }
+    };
+
+    if release {
+        push(EV_KEY_UP, kcode, 0, MODS);
+    } else {
+        let a = if kcode != 0 { kcode } else { real as i32 };
+        push(EV_KEY_DOWN, a, ascii, MODS);
     }
 }
 
 unsafe fn mouse_byte(b: u8) {
+    let plen = if WHEEL_MODE { 4 } else { 3 };
     match MIDX {
         0 => {
             if b & 0x08 != 0 {
@@ -173,14 +294,23 @@ unsafe fn mouse_byte(b: u8) {
         }
         2 => {
             MPKT[2] = b;
+            if plen == 3 {
+                MIDX = 0;
+                mouse_packet(false);
+            } else {
+                MIDX = 3;
+            }
+        }
+        3 => {
+            MPKT[3] = b;
             MIDX = 0;
-            mouse_packet();
+            mouse_packet(true);
         }
         _ => MIDX = 0,
     }
 }
 
-unsafe fn mouse_packet() {
+unsafe fn mouse_packet(has_wheel: bool) {
     let flags = MPKT[0];
     let mut dx = MPKT[1] as i32;
     let mut dy = MPKT[2] as i32;
@@ -197,10 +327,18 @@ unsafe fn mouse_packet() {
         LAST_BTN = btn;
         push(EV_MOUSE_BTN, btn, 0, 0);
     }
+    if has_wheel {
+        // 4-bit two's complement wheel delta; +1 = away (up), -1 = down
+        let w4 = (MPKT[3] & 0x0F) as i32;
+        let wv = if w4 & 0x08 != 0 { w4 | !0x0F } else { w4 };
+        if wv != 0 {
+            push(EV_MOUSE_WHEEL, wv, 0, 0);
+        }
+    }
 }
 
 unsafe fn drain() {
-    for _ in 0..256 {
+    for _ in 0..DRAIN_MAX {
         let st = in_p(0x64);
         if st & 1 == 0 {
             break; // output buffer empty
@@ -215,6 +353,7 @@ unsafe fn drain() {
 }
 
 /// ABI: int kian_poll_event(kian_event_t *out) -> 1 if an event was written.
+/// Never blocks; drains at most DRAIN_MAX bytes from the controller per call.
 pub fn poll_event(out: *mut KianEvent) -> i32 {
     unsafe {
         if !INITED {

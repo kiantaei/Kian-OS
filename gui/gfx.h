@@ -1,26 +1,54 @@
-// Kian OS GUI - pixel drawing primitives (integers only, 16.16 fixed point
-// where fractional math is needed - NO float/double).
+// Kian OS GUI - gfx core: frame + scene buffers, drawing primitives,
+// dirty-rect presentation with `rep movsd`. Integers only, no SSE.
 #pragma once
 #include <kian_abi.h>
 
-struct Surface {
-    uint32_t *buf;   // back buffer, stride == w
-    int w, h;
-};
-
 struct Rect { int x, y, w, h; };
 
-// 16.16 fixed point helpers (integer only)
-inline int32_t fx_from_int(int32_t v) { return v << 16; }
-inline int32_t fx_mul(int32_t a, int32_t b) { return (int32_t)(((int64_t)a * (int64_t)b) >> 16); }
-inline int32_t fx_div(int32_t a, int32_t b) { return (int32_t)(((int64_t)a << 16) / b); }
+struct Gfx {
+    uint32_t *frame;      // full composition buffer (w*h pixels)
+    uint32_t *scene;      // frame content WITHOUT the cursor (cursor trick)
+    int w, h;
+    uint32_t *fb;         // real framebuffer
+    int pitch;            // real framebuffer pitch in BYTES
+};
 
-uint32_t blend(uint32_t dst, uint32_t src, int alpha); // alpha 0..255, integer math
+extern Gfx *GFX;          // set by gfx_init, cleared by gfx_free
 
-void put_pixel(Surface &s, int x, int y, uint32_t c);
-void fill_rect(Surface &s, int x, int y, int w, int h, uint32_t c);
-void hline(Surface &s, int x, int y, int len, uint32_t c);
-void vline(Surface &s, int x, int y, int len, uint32_t c);
-void fill_round_rect(Surface &s, int x, int y, int w, int h, int r, uint32_t c);
-void draw_text(Surface &s, int x, int y, const char *str, uint32_t c, int scale);
-int  text_width(const char *str, int scale);
+bool gfx_init(const kian_fb_t *fb);   // false on OOM (frame+scene already freed)
+void gfx_free();
+
+void clip_set(Rect r);    // drawing is clipped to this rect (default: screen)
+void clip_reset();
+Rect clip_get();
+
+void gp(int x, int y, uint32_t c);                       // bounds+clip checked put_pixel
+void fill_rect(int x, int y, int w, int h, uint32_t c);
+void hline(int x, int y, int len, uint32_t c);
+void vline(int x, int y, int len, uint32_t c);
+void rect_outline(int x, int y, int w, int h, uint32_t c);
+void fill_round_rect(int x, int y, int w, int h, int r, uint32_t c);
+void round_rect_outline(int x, int y, int w, int h, int r, uint32_t c);
+void fill_circle(int cx, int cy, int r, uint32_t c);
+void circle_outline(int cx, int cy, int r, uint32_t c);
+void blend_pixel(int x, int y, uint32_t c, int alpha);   // alpha 0..255 over frame
+void blend_rect(int x, int y, int w, int h, uint32_t c, int alpha);
+void gradient_v(int x, int y, int w, int h, uint32_t top, uint32_t bottom);
+void blit(const uint32_t *src, int src_stride, int sx, int sy, int dx, int dy, int w, int h);
+void shadow_rect(int x, int y, int w, int h);            // soft 3-layer shadow
+
+int  glyph_advance(char c, int scale);
+void draw_text(int x, int y, const char *s, uint32_t c, int scale);
+void draw_text_bold(int x, int y, const char *s, uint32_t c, int scale);
+int  text_width(const char *s, int scale);
+int  text_width_n(const char *s, int n, int scale);  // width of the first n chars
+int  text_line_height(int scale);
+
+bool rect_hit(int px, int py, const Rect &r);
+bool rect_overlap(const Rect &a, const Rect &b);
+Rect rect_union(const Rect &a, const Rect &b);
+
+void present(int x, int y, int w, int h);    // frame -> framebuffer (rep movsd)
+void scene_copy(int x, int y, int w, int h); // scene -> frame (erase cursor)
+void scene_snap_all();                       // frame -> scene (after full redraws)
+void scene_snap_rect(int x, int y, int w, int h); // frame -> scene for a region

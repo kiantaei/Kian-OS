@@ -9,6 +9,11 @@ extern size_t strlen(const char *s);
 
 static char CUR_USER[32] = "kian";
 
+/* After a successful login, start the C++ desktop automatically.
+ * gui_main returns 0 when the user exits (ESC / Exit to console), then ksh
+ * continues with its prompt. Typing 'gui' in ksh still starts it manually. */
+static const int AUTOSTART_GUI = 1;
+
 static inline void kpause(void) {
     __asm__ volatile("pause");
 }
@@ -158,6 +163,12 @@ static void dispatch(char *cmd) {
 
 void kian_shell_main(void) {
     login();
+    if (AUTOSTART_GUI) {
+        kprintf("Starting GUI... (ESC or 'Exit to console' returns to ksh)\n");
+        gui_main(&kian_boot_info()->fb);
+        console_clear();
+        kprintf("GUI exited back to ksh. Type 'gui' to start it again.\n");
+    }
     kprintf("Welcome to ksh. Type 'help' for built-ins.\n");
     char line[160];
     for (;;) {

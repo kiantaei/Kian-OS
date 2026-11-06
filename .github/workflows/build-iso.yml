@@ -60,6 +60,25 @@ jobs:
           echo "----- qemu-debug.log (first 40 lines) -----"; head -40 qemu-debug.log || true
           echo "----- qemu-debug.log (last 20 lines) -----"; tail -20 qemu-debug.log || true
 
+      - name: GUI login test with screenshot
+        run: |
+          qemu-system-x86_64 -cdrom kian-os-0.2.0.iso -m 512 -vga std -display none -no-reboot \
+            -serial file:gui-serial.log -monitor unix:/tmp/qemu2.sock,server,nowait &
+          QPID=$!
+          sleep 12
+          # log in (kian/kian); AUTOSTART_GUI then boots the desktop
+          for k in k i a n ret k i a n ret; do
+            echo "sendkey $k" | socat - unix-connect:/tmp/qemu2.sock || true
+            sleep 0.3
+          done
+          sleep 8
+          echo "screendump /tmp/gui.ppm" | socat - unix-connect:/tmp/qemu2.sock || true
+          sleep 1
+          convert /tmp/gui.ppm gui.png || true
+          kill $QPID || true
+          echo "----- gui-serial.log (last 30 lines) -----"
+          tail -30 gui-serial.log || true
+
       - name: Upload debug files
         if: always()
         uses: actions/upload-artifact@v4
@@ -67,7 +86,9 @@ jobs:
           name: kian-debug
           path: |
             shot.png
+            gui.png
             serial.log
+            gui-serial.log
             debugcon.log
             qemu-debug.log
             kian-os-0.2.0.iso

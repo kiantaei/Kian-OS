@@ -36,9 +36,11 @@ for f in "$ROOT"/console/*.c; do
   clang $CFLAGS $extra -c "$f" -o "$o"
 done
 
-echo "[Kian] Building GUI (C++)..."
-for f in "$ROOT"/gui/*.cpp; do
-  o="$OBJ/gui_$(basename "${f%.cpp}").o"
+echo "[Kian] Building GUI (C++, desktop + apps)..."
+for f in "$ROOT"/gui/*.cpp "$ROOT"/gui/apps/*.cpp; do
+  rel="${f#$ROOT/}"                     # e.g. gui/apps/terminal.cpp
+  base="${rel//\//_}"                   # gui_apps_terminal.cpp
+  o="$OBJ/${base%.cpp}.o"               # unique per path
   clang++ $CXXFLAGS -c "$f" -o "$o"
 done
 

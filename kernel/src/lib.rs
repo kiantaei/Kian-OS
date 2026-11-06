@@ -257,6 +257,17 @@ pub extern "C" fn kian_poll_event(out: *mut KianEvent) -> i32 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn kian_mem_stats(used: *mut u64, total: *mut u64) {
+    let (u, t) = memory::heap::stats();
+    if !used.is_null() {
+        unsafe { *used = u; }
+    }
+    if !total.is_null() {
+        unsafe { *total = t; }
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn kian_uptime_ms() -> u64 {
     // TSC-based; fallback calibration assumes ~2 GHz (QEMU/VMware typical).
     // PIT-calibrated refinement comes with ENABLE_PIT.
