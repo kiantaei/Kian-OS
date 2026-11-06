@@ -48,7 +48,7 @@ pub fn arp_count() -> &'static mut usize {
 pub fn lookup(ip: &[u8; 4]) -> Option<[u8; 6]> {
     let table = arp_table();
     let count = arp_count();
-    let now = crate::arch::x86_64::pit::ticks();
+    let now = crate::drivers::pit::ticks();
     for i in 0..*count {
         if table[i].ip == *ip && table[i].expires_at > now {
             return Some(table[i].mac);
@@ -60,7 +60,7 @@ pub fn lookup(ip: &[u8; 4]) -> Option<[u8; 6]> {
 pub fn insert(ip: &[u8; 4], mac: &[u8; 6]) {
     let table = arp_table();
     let count = arp_count();
-    let now = crate::arch::x86_64::pit::ticks();
+    let now = crate::drivers::pit::ticks();
     // Update if exists.
     for i in 0..*count {
         if table[i].ip == *ip {

@@ -1,6 +1,6 @@
-use core::fmt::Write;
+use core::fmt;
 use core::ptr::{read_volatile, write_volatile};
-use core::sync::Once;
+use spin::Once;
 use spin::Mutex;
 
 const BUFFER_HEIGHT: usize = 25;
@@ -114,6 +114,15 @@ impl Writer {
                 );
             }
         }
+    }
+}
+
+impl fmt::Write for Writer {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for b in s.bytes() {
+            self.write_byte(b);
+        }
+        Ok(())
     }
 }
 

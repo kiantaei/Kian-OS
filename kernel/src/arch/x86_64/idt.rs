@@ -1,7 +1,7 @@
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
-use x86_64::structures::gdt::SegmentSelector;
 use x86_64::instructions::port::Port;
-use crate::{kprintln, serial};
+use crate::kprintln;
+use crate::arch::x86_64::serial;
 
 static mut IDT: Option<InterruptDescriptorTable> = None;
 
@@ -12,7 +12,7 @@ pub fn init() {
     unsafe {
         idt.double_fault
             .set_handler_fn(double_fault_handler)
-            .set_stack_index(crate::arch::gdt::DOUBLE_FAULT_IST_INDEX);
+            .set_stack_index(crate::arch::x86_64::gdt::DOUBLE_FAULT_IST_INDEX);
     }
     idt[0x21].set_handler_fn(keyboard_interrupt_handler);
     idt[0x2c].set_handler_fn(mouse_interrupt_handler);
@@ -25,19 +25,19 @@ pub fn init() {
     crate::kprintln!("[Kian] IDT loaded");
 }
 
-extern "x86-interrupt" fn breakpoint_handler(stack_frame: &mut InterruptStackFrame) {
+extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     kprintln!("EXCEPTION: BREAKPOINT\n{:#?}", stack_frame);
 }
 
 extern "x86-interrupt" fn double_fault_handler(
-    stack_frame: &mut InterruptStackFrame,
+    stack_frame: InterruptStackFrame,
     _error_code: u64,
 ) -> ! {
     panic!("EXCEPTION: DOUBLE FAULT\n{:#?}", stack_frame);
 }
 
 extern "x86-interrupt" fn page_fault_handler(
-    stack_frame: &mut InterruptStackFrame,
+    stack_frame: InterruptStackFrame,
     error_code: PageFaultErrorCode,
 ) {
     kprintln!("EXCEPTION: PAGE FAULT");
@@ -47,19 +47,19 @@ extern "x86-interrupt" fn page_fault_handler(
     crate::panic::halt("page fault");
 }
 
-extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
+extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
     let mut port = Port::<u8>::new(0x60);
     let _scancode = unsafe { port.read() };
-    x86_64::instructions::interrupts::eoi();
+    unsafe { crate::arch::x86_64::pic::eoi(0x21) };
 }
 
-extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
+extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptStackFrame) {
     let mut port = Port::<u8>::new(0x60);
     let _data = unsafe { port.read() };
-    x86_64::instructions::interrupts::eoi();
+    unsafe { crate::arch::x86_64::pic::eoi(0x2c) };
 }
 
-extern "x86-interrupt" fn pit_timer_handler(_stack_frame: &mut InterruptStackFrame) {
+extern "x86-interrupt" fn pit_timer_handler(_stack_frame: InterruptStackFrame) {
     crate::scheduler::timer_tick();
-    x86_64::instructions::interrupts::eoi();
+    unsafe { crate::arch::x86_64::pic::eoi(0x20) };
 }

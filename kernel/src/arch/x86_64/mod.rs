@@ -2,6 +2,7 @@ pub mod gdt;
 pub mod idt;
 pub mod interrupts;
 pub mod paging;
+pub mod pic;
 pub mod serial;
 pub mod context;
 pub mod tss;

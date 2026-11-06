@@ -1,3 +1,4 @@
+use crate::arch::x86_64::context::switch_context;
 use spin::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +38,27 @@ pub fn spawn(entry: usize) -> u64 {
             entry,
         };
         // Set up initial stack pointer at top of stack
-        task.stack_ptr = task.kernel_stack.as_ptr() as u64 + (task.kernel_stack.len() as u64) * 8 - 16;
+        // Layout from stack_ptr upward (for switch_context pop/ret sequence):
+        //   stack_ptr+0:  0 (r15)
+        //   stack_ptr+8:  0 (r14)
+        //   stack_ptr+16: 0 (r13)
+        //   stack_ptr+24: 0 (r12)
+        //   stack_ptr+32: 0 (rbx)
+        //   stack_ptr+40: 0 (rbp)
+        //   stack_ptr+48: entry (ret target)
+        let stack_top = task.kernel_stack.as_ptr() as u64 + task.kernel_stack.len() as u64 * 8;
+        let stack_ptr = stack_top - 56; // 7 u64s
+        unsafe {
+            let ptr = stack_ptr as *mut u64;
+            ptr.write(0);           // r15
+            ptr.add(1).write(0);    // r14
+            ptr.add(2).write(0);    // r13
+            ptr.add(3).write(0);    // r12
+            ptr.add(4).write(0);    // rbx
+            ptr.add(5).write(0);    // rbp
+            ptr.add(6).write(task.entry as u64); // ret target
+        }
+        task.stack_ptr = stack_ptr;
         let mut count = TASK_COUNT.lock();
         if let Some(slot) = TASKS.iter_mut().find(|s| s.is_none()) {
             *slot = Some(task);

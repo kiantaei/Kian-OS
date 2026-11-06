@@ -50,7 +50,7 @@ pub fn handle_offer(body: &[u8]) {
         return;
     }
     let yiaddr: [u8; 4] = body[16..20].try_into().unwrap();
-    kprintln!("[Kian] DHCP Offer: {}:{}.{}.{}", yiaddr[0], yiaddr[1], yiaddr[2], yiaddr[3]);
+    kprintln!("[Kian] DHCP Offer: {}.{}.{}.{}", yiaddr[0], yiaddr[1], yiaddr[2], yiaddr[3]);
     ipv4::set_our_ip(yiaddr);
     unsafe { DHCP = Some(DhcpState { server_ip: [0,0,0,0], offered_ip: yiaddr, lease_seconds: 86400 }); }
     request(yiaddr);

@@ -1,29 +1,22 @@
-use core::arch::asm;
+use core::arch::naked_asm;
 
-// Switch from current stack pointer `from` to `to`, then jump to `target`.
-// Never returns.
 #[unsafe(naked)]
-pub unsafe extern "C" fn switch(from: *mut u64, to: *mut u64, target: *mut u8) -> ! {
-    asm!(
-        "mov [rdi], rsp",   // save current sp into *from
-        "mov rsp, [rsi]",   // load new sp from *to
-        "push rbx",         // preserve callee-saved
+pub unsafe extern "C" fn switch_context(old_sp: *mut u64, new_sp: u64) {
+    naked_asm!(
         "push rbp",
+        "push rbx",
         "push r12",
         "push r13",
         "push r14",
         "push r15",
-        "jmp *rdx",         // jump to target function
-        in("rdi") from,
-        in("rsi") to,
-        in("rdx") target,
-        options(noreturn)
+        "mov [rdi], rsp",
+        "mov rsp, rsi",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbx",
+        "pop rbp",
+        "ret",
     );
-    core::hint::unreachable_unchecked();
-}
-
-#[unsafe(naked)]
-pub unsafe extern "C" fn context_switch_trampoline() -> ! {
-    asm!("ret", options(noreturn));
-    core::hint::unreachable_unchecked();
 }
