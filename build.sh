@@ -1,50 +1,44 @@
 #!/usr/bin/env bash
-# Kian OS - Build script
-# Usage: ./build.sh [iso]
 set -euo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KERNEL_DIR="$ROOT/kernel"
 ISO_DIR="$ROOT/iso"
 OUT_ISO="$ROOT/kian-os-0.2.0.iso"
+KTARGET=x86_64-unknown-none
+CARGO_OUT="$ROOT/build/cargo"
+KLIB="$CARGO_OUT/$KTARGET/release/libkian_kernel.a"
 
+rm -rf "$ISO_DIR"
 mkdir -p "$ISO_DIR/boot"
 
-echo "[Kian] Building kernel (target: x86_64-unknown-none)..."
-cargo +nightly build --release --manifest-path "$KERNEL_DIR/Cargo.toml"
+echo "[Kian] Building kernel (target: $KTARGET)..."
+( cd "$KERNEL_DIR" && cargo +nightly build --release --target "$KTARGET" --target-dir "$CARGO_OUT" )
 
-# Find the static library Cargo produced (show errors, don't suppress)
-KERNEL_A=$(find "$ROOT/kernel/target/x86_64-unknown-none/release" -name "libkian_kernel.a" -o -name "libkian-kernel.a" | head -1)
-if [ -z "$KERNEL_A" ]; then
-    echo "[Kian] ERROR: No static library found in release folder:"
-    ls -la "$ROOT/kernel/target/x86_64-unknown-none/release/" 2>&1 || true
-    exit 1
+if [ ! -f "$KLIB" ]; then
+  echo "[Kian] ERROR: kernel library not found: $KLIB"
+  ls -R "$CARGO_OUT" 2>&1 | head -40 || true
+  exit 1
 fi
-echo "[Kian] Using static library: $KERNEL_A"
+echo "[Kian] Kernel library: $KLIB"
 
-# Verify ld.lld exists
-if ! command -v ld.lld >/dev/null 2>&1; then
-    echo "[Kian] ERROR: ld.lld not found in PATH"
-    exit 1
-fi
+command -v ld.lld >/dev/null || { echo "[Kian] ERROR: ld.lld not found (sudo apt-get install -y lld)"; exit 1; }
 
 echo "[Kian] Linking kernel ELF (higher-half)..."
 ld.lld \
-  -T "$ROOT/kernel/linker.ld" \
-  -nostdlib \
-  -o "$ISO_DIR/boot/kian-kernel.elf" \
-  "$KERNEL_A" \
-  -Ttext=0xffffffff80000000
+  -T "$KERNEL_DIR/linker.ld" \
+  -nostdlib -static \
+  -z max-page-size=0x1000 \
+  --gc-sections \
+  -u _start \
+  --whole-archive "$KLIB" --no-whole-archive \
+  -o "$ISO_DIR/boot/kian-kernel.elf"
 
-echo "[Kian] Kernel ELF: $ISO_DIR/boot/kian-kernel.elf"
-file "$ISO_DIR/boot/kian-kernel.elf" 2>/dev/null || true
-
-echo "[Kian] Copying Limine config..."
-cp "$ROOT/config/limine.cfg" "$ISO_DIR/limine.cfg"
+echo "[Kian] Kernel ELF:"
+file "$ISO_DIR/boot/kian-kernel.elf" || true
+readelf -h "$ISO_DIR/boot/kian-kernel.elf" | grep -E "Entry point|Type" || true
 
 echo "[Kian] Building ISO..."
-"$ROOT/tools/make_iso.sh" "$ISO_DIR" "$OUT_ISO"
+bash "$ROOT/tools/make_iso.sh" "$ISO_DIR" "$OUT_ISO"
 
-echo "[Kian] Done: $OUT_ISO"
 sha256sum "$OUT_ISO" > "$OUT_ISO.sha256"
-echo "[Kian] Checksum: $OUT_ISO.sha256"
+echo "[Kian] Done: $OUT_ISO"

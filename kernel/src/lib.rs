@@ -75,6 +75,14 @@ pub extern "C" fn kernel_main() -> ! {
     process::start_userspace();
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn _start() -> ! {
+    kernel_main();
+    loop {
+        unsafe { core::arch::asm!("hlt"); }
+    }
+}
+
 #[macro_export]
 macro_rules! kprint {
     ($($arg:tt)*) => ({

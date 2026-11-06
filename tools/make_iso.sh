@@ -1,48 +1,27 @@
 #!/usr/bin/env bash
-# Kian OS - Build a hybrid BIOS+UEFI ISO from an ISO dir
-# Usage: make_iso.sh <iso_dir> <output.iso>
 set -euo pipefail
-
-ISO_DIR="${1:?usage: make_iso.sh <iso_dir> <output.iso>}"
-OUT_ISO="${2:?usage: make_iso.sh <iso_dir> <output.iso>}"
+ISO_DIR="$1"
+OUT_ISO="$2"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LIMINE_DIR="$ROOT/build/limine"
 
-EFI_DIR="$ISO_DIR/EFI/BOOT"
-mkdir -p "$EFI_DIR"
+command -v xorriso >/dev/null || { echo "[Kian] ERROR: xorriso missing (sudo apt-get install -y xorriso mtools)"; exit 1; }
 
-# If limine is available, use it; otherwise build a simple El Torito ISO.
-if command -v limine-deploy >/dev/null 2>&1 || [ -f "$ROOT/vendor/limine/limine-deploy" ]; then
-  echo "[Kian] Using Limine to deploy bootloader..."
-  limine-deploy bios "$ISO_DIR" 2>/dev/null || true
-  limine-deploy uefi "$ISO_DIR" 2>/dev/null || true
-else
-  echo "[Kian] Limine not found; building plain El Torito ISO (BIOS boot via isolinux not included)."
+if [ ! -d "$LIMINE_DIR" ]; then
+  git clone https://github.com/limine-bootloader/limine.git --branch=v8.x-binary --depth=1 "$LIMINE_DIR"
 fi
+make -C "$LIMINE_DIR"
 
-# Build ISO with xorriso (hybrid BIOS+UEFI)
-if command -v xorriso >/dev/null 2>&1; then
-  echo "[Kian] Creating hybrid ISO with xorriso..."
-  xorriso -as mkisofs \
-    -iso-level 3 \
-    -full-iso9660-filenames \
-    -volid "KIAN_OS" \
-    -volset "KIAN OS" \
-    -publisher "Kian OS Project" \
-    -preparer "Kian OS 0.2.0 Horizon" \
-    -sysid "LINUX" \
-    -boot-load-size 4 \
-    -boot-info-table \
-    -eltorito-boot boot/limine-bios.sys \
-    -eltorito-catalog boot/boot.cat \
-    -no-emul-boot \
-    -eltorito-alt-boot \
-    -e EFI/BOOT/BOOTX64.EFI \
-    -no-emul-boot \
-    -isohybrid-gpt-basdat \
-    -output "$OUT_ISO" \
-    "$ISO_DIR"
-  echo "[Kian] ISO written: $OUT_ISO"
-else
-  echo "[Kian] xorriso not found; skipping ISO creation."
-  exit 1
-fi
+mkdir -p "$ISO_DIR/boot/limine" "$ISO_DIR/EFI/BOOT"
+cp "$ROOT/config/limine.conf" "$ISO_DIR/boot/limine/limine.conf"
+cp "$LIMINE_DIR/limine-bios.sys" "$LIMINE_DIR/limine-bios-cd.bin" "$LIMINE_DIR/limine-uefi-cd.bin" "$ISO_DIR/boot/limine/"
+cp "$LIMINE_DIR/BOOTX64.EFI" "$LIMINE_DIR/BOOTIA32.EFI" "$ISO_DIR/EFI/BOOT/"
+
+xorriso -as mkisofs -R -r -J \
+  -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table \
+  -hfsplus -apm-block-size 2048 \
+  --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label \
+  "$ISO_DIR" -o "$OUT_ISO"
+
+"$LIMINE_DIR/limine" bios-install "$OUT_ISO"
+echo "[Kian] ISO created: $OUT_ISO"

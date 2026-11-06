@@ -60,7 +60,8 @@ extern "C" {
 
 /// The Limine framebuffer request entry. Limine scans the .limine_requests
 /// section and fills in the `response` pointer for matching IDs.
-#[link_section = ".limine_requests"]
+#[used]
+#[unsafe(link_section = ".limine_requests")]
 static mut FRAMEBUFFER_REQUEST_ENTRY: LimineFramebufferRequest = LimineFramebufferRequest {
     id: [0u8; 16], // 16 bytes — MUST be set to Limine's framebuffer request GUID (see limine.h)
     revision: 0,
