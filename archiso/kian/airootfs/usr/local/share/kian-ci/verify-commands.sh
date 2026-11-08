@@ -74,6 +74,13 @@ fi
 PACMAN="sudo -n pacman"   # CI pre-caches sudo credentials (sudo -S -v)
 if timeout 300 $PACMAN -Sy --noconfirm >/tmp/kian-pacman-sy.log 2>&1; then
     ok "pacman: -Sy database refresh over network succeeded"
+    # The ISO carries the archlinux-keyring snapshot from build time; package
+    # signatures made with newer packager keys are "unknown trust" until the
+    # keyring is updated (the official remedy for exactly this error).
+    if ! $PACMAN -S --noconfirm archlinux-keyring >>/tmp/kian-pacman-sy.log 2>&1; then
+        echo "NOTE: archlinux-keyring update failed; installing with the build-time keyring"
+    fi
+    sudo -n pacman-key --populate archlinux >/dev/null 2>&1 || true
     if timeout 300 $PACMAN -S --noconfirm tree >>/tmp/kian-pacman-sy.log 2>&1 && command -v tree >/dev/null; then
         ok "pacman: real package install succeeded (tree $(tree --version | head -1 | grep -o '[0-9.]*$'))"
     else
