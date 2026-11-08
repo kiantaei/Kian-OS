@@ -13,7 +13,7 @@ parse_git_branch() {
     git branch 2>/dev/null | sed -n 's/^\* \(.*\)/ (\1)/p'
 }
 
-PS1='\[\e[32m\]\u@\kian-os\[\e[0m\]:\[\e[34m\]\w\[\e[0m\]\[\e[33m\]$(parse_git_branch)\[\e[0m\] \$ '
+PS1='\[\e[32m\]\u@kian-os\[\e[0m\]:\[\e[34m\]\w\[\e[0m\]\[\e[33m\]$(parse_git_branch)\[\e[0m\] \$ '
 
 export EDITOR=nano
 export VISUAL=nano

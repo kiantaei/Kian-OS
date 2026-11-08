@@ -58,7 +58,7 @@ jobs:
           cat kian-os-0.4.0-x86_64.iso.sha256
 
       - name: Real QEMU boot test (BIOS + serial login + desktop)
-        timeout-minutes: 45
+        timeout-minutes: 60
         run: |
           bash scripts/ci-boot-test.sh build/out/kian-os-0.4.0-x86_64.iso build/test
           cat build/test/boot-test-summary.txt

@@ -50,13 +50,24 @@ expect <<'EOT' || STATUS=1
         timeout { puts "LOGIN_FAIL: no password prompt"; exit 12 }
     }
     send "kian\r"
+    # Match either the session-start marker or the (color-escaped) prompt;
+    # "kian@kian-os" appears in both. Under TCG the first session setup can
+    # stall while X/XFCE autostart saturates the CPU, so allow plenty of time.
+    set timeout 1500
     expect {
-        -re {\[kian@kian-os } { puts "\n=== LOGIN_OK: bash shell as kian ===" }
-        timeout { puts "LOGIN_FAIL: no shell prompt (wrong password? PAM issue?)"; exit 13 }
+        -re {kian@kian-os} { puts "\n=== LOGIN_OK: bash session as kian ===" }
+        timeout { puts "LOGIN_FAIL: no shell session within timeout"; exit 13 }
     }
+    # settle: press enter and wait for a fresh prompt tail
+    send "\r"
+    expect {
+        -re {\$ } {}
+        timeout {}
+    }
+    set timeout 900
 
     # --- 3. desktop: wait for lightdm + XFCE (slow under TCG), then shoot ---
-    send "for i in \$(seq 1 60); do systemctl is-active lightdm >/dev/null 2>&1 && pgrep -x xfce4-session >/dev/null 2>&1 && break; sleep 10; done; echo DESKTOP_WAIT_DONE\r"
+    send "for i in \$(seq 1 40); do systemctl is-active lightdm >/dev/null 2>&1 && pgrep -x xfce4-session >/dev/null 2>&1 && break; sleep 10; done; echo DESKTOP_WAIT_DONE\r"
     expect {
         "DESKTOP_WAIT_DONE" {}
         timeout { puts "DESKTOP_WAIT_TIMEOUT (continuing; screenshots will show the truth)" }
