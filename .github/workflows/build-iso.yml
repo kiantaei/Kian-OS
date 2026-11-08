@@ -47,6 +47,7 @@ jobs:
 
       - name: Build ISO with mkarchiso
         run: |
+          mkdir -p build/work build/out
           mkarchiso -v -w build/work -o build/out archiso/kian
 
       - name: Checksums

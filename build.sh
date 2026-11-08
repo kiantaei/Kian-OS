@@ -35,6 +35,7 @@ fi
 [[ $(id -u) -eq 0 ]] || die "mkarchiso needs root: run with sudo"
 
 say "building Kian OS ISO (this downloads Arch packages; takes a while) ..."
+mkdir -p "${WORK}" "${OUT}"
 mkarchiso -v -w "${WORK}" -o "${OUT}" "${PROFILE}"
 
 say "done. artifacts:"
