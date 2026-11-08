@@ -1,9 +1,21 @@
 name: Build Kian OS ISO
 
+# Builds the Linux-based Kian OS ISO with archiso inside an official
+# archlinux container, runs a REAL QEMU boot test (serial login as kian,
+# gcc/python/pacman checks, desktop screenshots) and publishes the ISO to
+# GitHub Releases. All results shown are real build/test outputs.
+
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 permissions:
   contents: write
@@ -11,97 +23,90 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      options: --privileged
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set git user to kiantaei
+      - name: Install build dependencies
         run: |
-          git config user.name "kiantaei"
-          git config user.email "kiantaei@users.noreply.github.com"
+          pacman -Syu --noconfirm archiso grub syslinux mtools dosfstools \
+            qemu-desktop expect socat
 
-      - name: Install host build tools
+      - name: Profile sanity checks
         run: |
-          sudo apt-get update && sudo apt-get install -y clang lld llvm xorriso mtools qemu-system-x86 socat imagemagick build-essential git
+          bash -n archiso/kian/profiledef.sh
+          bash -n build.sh
+          bash -n scripts/ci-boot-test.sh
+          bash -n archiso/kian/airootfs/usr/local/bin/kian-setup
+          bash -n archiso/kian/airootfs/usr/bin/xenox
+          bash -n archiso/kian/airootfs/usr/local/share/kian-ci/verify-commands.sh
+          echo "profile sanity checks passed"
 
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly
-          components: rust-src, llvm-tools-preview
-
-      - name: Add x86_64-unknown-none target
+      - name: Build ISO with mkarchiso
         run: |
-          rustup target add x86_64-unknown-none --toolchain nightly
+          mkarchiso -v -w build/work -o build/out archiso/kian
 
-      - name: Build kernel + ISO
+      - name: Checksums
         run: |
-          make iso
+          cd build/out
+          ls -lh
+          sha256sum kian-os-*.iso > kian-os-0.4.0-x86_64.iso.sha256
+          cat kian-os-0.4.0-x86_64.iso.sha256
 
-      - name: Install debug tools
-        run: sudo apt-get install -y socat imagemagick
-
-      - name: QEMU boot test with screenshot
+      - name: Real QEMU boot test (BIOS + serial login + desktop)
+        timeout-minutes: 45
         run: |
-          qemu-system-x86_64 -cdrom kian-os-0.2.0.iso -m 512 -vga std -display none -no-reboot \
-            -d int,cpu_reset,guest_errors -D qemu-debug.log \
-            -serial file:serial.log -debugcon file:debugcon.log \
-            -monitor unix:/tmp/qemu.sock,server,nowait &
-          QPID=$!
-          sleep 12
-          echo "screendump /tmp/shot.ppm" | socat - unix-connect:/tmp/qemu.sock || true
-          sleep 1
-          convert /tmp/shot.ppm shot.png || true
-          kill $QPID || true
-          echo "----- serial.log -----"; cat serial.log || true
-          echo "----- debugcon.log -----"; cat debugcon.log || true
-          echo "----- qemu-debug.log (first 40 lines) -----"; head -40 qemu-debug.log || true
-          echo "----- qemu-debug.log (last 20 lines) -----"; tail -20 qemu-debug.log || true
+          bash scripts/ci-boot-test.sh build/out/kian-os-0.4.0-x86_64.iso build/test
+          cat build/test/boot-test-summary.txt
+          echo "----- serial transcript (first 120 lines) -----"
+          head -120 build/test/kian-serial-transcript.txt || true
+          echo "----- serial transcript (last 80 lines) -----"
+          tail -80 build/test/kian-serial-transcript.txt || true
 
-      - name: GUI login test with screenshot
-        run: |
-          qemu-system-x86_64 -cdrom kian-os-0.2.0.iso -m 512 -vga std -display none -no-reboot \
-            -serial file:gui-serial.log -monitor unix:/tmp/qemu2.sock,server,nowait &
-          QPID=$!
-          sleep 12
-          # log in (kian/kian); AUTOSTART_GUI then boots the desktop
-          for k in k i a n ret k i a n ret; do
-            echo "sendkey $k" | socat - unix-connect:/tmp/qemu2.sock || true
-            sleep 0.3
-          done
-          sleep 8
-          echo "screendump /tmp/gui.ppm" | socat - unix-connect:/tmp/qemu2.sock || true
-          sleep 1
-          convert /tmp/gui.ppm gui.png || true
-          kill $QPID || true
-          echo "----- gui-serial.log (last 30 lines) -----"
-          tail -30 gui-serial.log || true
-
-      - name: Upload debug files
+      - name: Upload build artifacts (always, for debugging)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kian-debug
+          name: kian-os-0.4.0-build
           path: |
-            shot.png
-            gui.png
-            serial.log
-            gui-serial.log
-            debugcon.log
-            qemu-debug.log
-            kian-os-0.2.0.iso
-            kian-os-0.2.0.iso.sha256
+            build/out/*.iso
+            build/out/*.sha256
+            build/test/*
+          if-no-files-found: warn
 
-      - name: Publish release
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish rolling release (main branch)
+        if: github.ref == 'refs/heads/main' && success()
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: v0.2.0-build-${{ github.run_number }}
-          name: Kian OS 0.2.0 build ${{ github.run_number }}
-          files: |
-            kian-os-0.2.0.iso
-            kian-os-0.2.0.iso.sha256
+          allowUpdates: true
+          replacesArtifacts: true
+          removeArtifacts: true
+          tag: latest
+          name: "Kian OS 0.4.0 rolling build"
+          prerelease: true
+          body: |
+            Automated rolling build of Kian OS 0.4.0 "Horizon" (Linux-based).
+
+            - commit: ${{ github.sha }}
+            - built with archiso in an archlinux:base-devel container
+            - passed the automated QEMU boot test (login, gcc, python, pacman, filesystem, desktop services)
+
+            Boot it in VMware (primary target), QEMU or VirtualBox. Live login: `kian` / `kian`.
+          artifacts: "build/out/kian-os-*.iso,build/out/*.sha256"
+
+      - name: Publish tagged release (v*)
+        if: startsWith(github.ref, 'refs/tags/v') && success()
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          replacesArtifacts: true
+          name: "Kian OS ${{ github.ref_name }}"
+          body: |
+            Kian OS ${{ github.ref_name }} "Horizon" — Linux-based desktop operating system.
+
+            Built with archiso (Arch Linux base). See README.md for details and
+            the verification checklist.
+          artifacts: "build/out/kian-os-*.iso,build/out/*.sha256"

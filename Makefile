@@ -1,33 +1,29 @@
-# Kian OS Makefile
+# Kian OS Makefile — Linux-based edition.
 # Single command: make iso
 
-.PHONY: all iso clean run-qemu toolchain
+.PHONY: all iso check clean run-qemu help
 
 ROOT := $(CURDIR)
-ISO_DIR := $(ROOT)/iso
-OUT_ISO := $(ROOT)/kian-os-0.2.0.iso
+OUT_ISO := $(ROOT)/build/out/kian-os-0.4.0-x86_64.iso
 
 all: iso
 
 iso:
 	bash ./build.sh
 
-toolchain:
-	bash ./toolchain-setup.sh
+check:
+	bash ./build.sh --check
 
 clean:
-	rm -rf $(ROOT)/target $(ROOT)/kian-os-0.2.0.iso $(ROOT)/kian-os-0.2.0.iso.sha256
-	rm -rf $(ROOT)/iso/boot
+	rm -rf $(ROOT)/build
 
-run-qemu: iso
-	qemu-system-x86_64 \
-		-m 2G -smp 2 \
-		-drive file=$(OUT_ISO),format=raw,media=cdrom \
-		-serial stdio
+run-qemu: $(OUT_ISO)
+	qemu-system-x86_64 -m 2048 -smp 2 -enable-kvm \
+		-cdrom $(OUT_ISO) -boot d
 
 help:
-	@echo "Kian OS build targets:"
-	@echo "  make iso       - Build kian-os-0.2.0.iso (BIOS+UEFI hybrid)"
-	@echo "  make toolchain - Install Rust nightly + cross target"
-	@echo "  make run-qemu  - Boot ISO in QEMU"
-	@echo "  make clean     - Clean build artifacts"
+	@echo "Kian OS build targets (Linux-based edition):"
+	@echo "  make iso       - Build build/out/kian-os-0.4.0-x86_64.iso via archiso (needs root + archiso)"
+	@echo "  make check     - Run profile sanity checks only"
+	@echo "  make run-qemu  - Boot the built ISO in QEMU"
+	@echo "  make clean     - Remove build artifacts"
