@@ -14,6 +14,7 @@ set -uo pipefail
 ISO="${1:?usage: ci-boot-test.sh <iso> <outdir>}"
 OUTDIR="${2:?usage: ci-boot-test.sh <iso> <outdir>}"
 MON=/tmp/kian-qemu-mon.sock
+export ISO   # the expect script reads it via $env(ISO)
 mkdir -p "${OUTDIR}"
 
 command -v expect >/dev/null || { echo "FATAL: expect missing"; exit 2; }
