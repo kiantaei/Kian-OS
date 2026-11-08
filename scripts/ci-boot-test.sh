@@ -31,7 +31,7 @@ expect <<'EOT' || STATUS=1
     set timeout 900
     log_file -a /tmp/kian-serial-transcript.txt
     spawn qemu-system-x86_64 \
-        -m 2048 -smp 2 \
+        -m 2048 -smp 4 \
         -cdrom $env(ISO) -boot d \
         -display none -serial mon:stdio -no-reboot \
         -monitor unix:/tmp/kian-qemu-mon.sock,server,nowait
@@ -67,7 +67,7 @@ expect <<'EOT' || STATUS=1
     set timeout 900
 
     # --- 3. desktop: wait for lightdm + XFCE (slow under TCG), then shoot ---
-    send "for i in \$(seq 1 40); do systemctl is-active lightdm >/dev/null 2>&1 && pgrep -x xfce4-session >/dev/null 2>&1 && break; sleep 10; done; echo DESKTOP_WAIT_DONE\r"
+    send "for i in \$(seq 1 60); do systemctl is-active lightdm >/dev/null 2>&1 && pgrep -x xfce4-session >/dev/null 2>&1 && break; sleep 10; done; echo DESKTOP_WAIT_DONE\r"
     expect {
         "DESKTOP_WAIT_DONE" {}
         timeout { puts "DESKTOP_WAIT_TIMEOUT (continuing; screenshots will show the truth)" }
@@ -87,7 +87,15 @@ expect <<'EOT' || STATUS=1
     expect {
         -re {VERIFY_EXIT=(\d+)} {
             puts "\n=== VERIFY_COMMANDS_EXIT: $expect_out(1,string) ==="
-            if {$expect_out(1,string) != 0} { exit 14 }
+            if {$expect_out(1,string) != 0} {
+                # dump honest diagnostics into the transcript before failing
+                send "echo --- DIAG BEGIN; journalctl -u lightdm --no-pager -n 40 2>&1 | tail -40; systemctl --no-pager status lightdm 2>&1 | head -12; timedatectl 2>&1 | head -8; cat /tmp/kian-pacman-sy.log 2>/dev/null | tail -25; echo --- DIAG END\r"
+                expect {
+                    "--- DIAG END" {}
+                    timeout {}
+                }
+                exit 14
+            }
         }
         timeout { puts "VERIFY_TIMEOUT"; exit 15 }
     }

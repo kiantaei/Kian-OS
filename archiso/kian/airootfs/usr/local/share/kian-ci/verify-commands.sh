@@ -76,10 +76,16 @@ if timeout 300 pacman -Sy --noconfirm >/tmp/kian-pacman-sy.log 2>&1; then
     if timeout 300 pacman -S --noconfirm tree >>/tmp/kian-pacman-sy.log 2>&1 && command -v tree >/dev/null; then
         ok "pacman: real package install succeeded (tree $(tree --version | head -1 | grep -o '[0-9.]*$'))"
     else
-        netbad "pacman: package install failed (see /tmp/kian-pacman-sy.log)"
+        netbad "pacman: package install failed (log follows)"
+        tail -15 /tmp/kian-pacman-sy.log
     fi
 else
-    netbad "pacman: -Sy failed (see /tmp/kian-pacman-sy.log)"
+    netbad "pacman: -Sy failed (log follows — real cause, not simulated)"
+    tail -15 /tmp/kian-pacman-sy.log
+    echo "DIAG: timedatectl (TLS needs a sane clock):"
+    timedatectl 2>/dev/null | head -6
+    echo "DIAG: pacman-init service: $(systemctl is-active pacman-init 2>/dev/null || echo unknown)"
+    echo "DIAG: default route: $(ip route get 1.1.1.1 2>/dev/null | head -1 || echo none)"
 fi
 
 # 7. Desktop / services (items 3,4,10)
