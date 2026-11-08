@@ -71,9 +71,10 @@ if pacman -Qi bash >/dev/null 2>&1; then
 else
     bad "pacman: -Qi failed"
 fi
-if timeout 300 pacman -Sy --noconfirm >/tmp/kian-pacman-sy.log 2>&1; then
+PACMAN="sudo -n pacman"   # CI pre-caches sudo credentials (sudo -S -v)
+if timeout 300 $PACMAN -Sy --noconfirm >/tmp/kian-pacman-sy.log 2>&1; then
     ok "pacman: -Sy database refresh over network succeeded"
-    if timeout 300 pacman -S --noconfirm tree >>/tmp/kian-pacman-sy.log 2>&1 && command -v tree >/dev/null; then
+    if timeout 300 $PACMAN -S --noconfirm tree >>/tmp/kian-pacman-sy.log 2>&1 && command -v tree >/dev/null; then
         ok "pacman: real package install succeeded (tree $(tree --version | head -1 | grep -o '[0-9.]*$'))"
     else
         netbad "pacman: package install failed (log follows)"

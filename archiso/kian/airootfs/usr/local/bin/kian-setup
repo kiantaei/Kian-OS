@@ -11,7 +11,11 @@ if ! getent passwd kian >/dev/null; then
 fi
 
 # Groups: wheel => sudo access; the rest are standard desktop groups.
-usermod -aG wheel,users,audio,video,storage,optical,input kian 2>/dev/null || true
+# 'autologin' is REQUIRED by lightdm >= 1.33 for passwordless autologin
+# (see /etc/pam.d/lightdm-autologin: pam_succeed_if "user ingroup autologin");
+# the group is not created by the lightdm package, so create it here.
+groupadd -f autologin
+usermod -aG wheel,users,audio,video,storage,optical,input,autologin kian 2>/dev/null || true
 
 # Live medium default password (kian / kian). Change it with `passwd`
 # after installing Kian OS to disk.
