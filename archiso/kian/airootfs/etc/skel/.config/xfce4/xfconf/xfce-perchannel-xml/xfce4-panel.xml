@@ -14,7 +14,11 @@
   <property name="configver" type="int" value="2"/>
   <property name="panels" type="array">
     <property name="panel-1" type="empty">
-      <property name="position" type="string" value="p=6;o=0"/>
+      <!-- xfce4-panel 4.20 position format: p=N;x=X;y=Y.
+           SnapPosition enum: 0=none, ..., 12=S (bottom spanning). The old
+           "p=6;o=0" syntax no longer parses (p=6 is top-left in 4.20!). -->
+      <property name="position" type="string" value="p=12;x=0;y=0"/>
+      <property name="position-locked" type="bool" value="true"/>
       <property name="length" type="double" value="100.0"/>
       <property name="size" type="uint" value="44"/>
       <property name="background-style" type="uint" value="1"/>
