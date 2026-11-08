@@ -22,7 +22,7 @@ command -v qemu-system-x86_64 >/dev/null || { echo "FATAL: qemu missing"; exit 2
 command -v socat >/dev/null || { echo "FATAL: socat missing"; exit 2; }
 [[ -s "${ISO}" ]] || { echo "FATAL: ISO missing/empty: ${ISO}"; exit 2; }
 
-rm -f "${MON}" /tmp/kian-serial-transcript.txt /tmp/kian-desktop-1.png /tmp/kian-desktop-2.png
+rm -f "${MON}" /tmp/kian-serial-transcript.txt /tmp/kian-desktop-1.ppm /tmp/kian-desktop-2.ppm
 SUMMARY="${OUTDIR}/boot-test-summary.txt"
 : > "${SUMMARY}"
 
@@ -85,9 +85,14 @@ expect <<'EOT' || STATUS=1
         timeout { puts "DESKTOP_STATE unknown" }
     }
     sleep 5
-    if {[catch {exec echo "screendump /tmp/kian-desktop-1.png png" | socat - UNIX-CONNECT:/tmp/kian-qemu-mon.sock} err]} {
-        puts "SCREENSHOT_1_FAIL: $err"
-    } else { puts "SCREENSHOT_1_OK" }
+    # HMP screendump writes PPM (the 'png' format arg is not portable across
+    # HMP versions); the monitor reply is logged so a failure is VISIBLE.
+    if {[catch {exec echo "screendump /tmp/kian-desktop-1.ppm" | socat - UNIX-CONNECT:/tmp/kian-qemu-mon.sock} reply]} {
+        puts "SCREENSHOT_1_FAIL: $reply"
+    } else {
+        puts "SCREENSHOT_1_MONITOR_REPLY: [string trim $reply]"
+        puts "SCREENSHOT_1_DONE"
+    }
 
     # --- 4. real command verification (identity, gcc, python, fs, pacman) ---
     send "bash /usr/local/share/kian-ci/verify-commands.sh 2>&1; echo VERIFY_EXIT=\$?\r"
@@ -109,9 +114,12 @@ expect <<'EOT' || STATUS=1
 
     # --- 5. second screenshot (desktop settled) ---
     sleep 5
-    if {[catch {exec echo "screendump /tmp/kian-desktop-2.png png" | socat - UNIX-CONNECT:/tmp/kian-qemu-mon.sock} err]} {
-        puts "SCREENSHOT_2_FAIL: $err"
-    } else { puts "SCREENSHOT_2_OK" }
+    if {[catch {exec echo "screendump /tmp/kian-desktop-2.ppm" | socat - UNIX-CONNECT:/tmp/kian-qemu-mon.sock} reply]} {
+        puts "SCREENSHOT_2_FAIL: $reply"
+    } else {
+        puts "SCREENSHOT_2_MONITOR_REPLY: [string trim $reply]"
+        puts "SCREENSHOT_2_DONE"
+    }
 
     # --- 6. honest shutdown (item 11 of the checklist) ---
     send "echo kian | sudo -S systemctl poweroff 2>&1; echo POWEROFF_SENT\r"
@@ -126,10 +134,17 @@ expect <<'EOT' || STATUS=1
 EOT
 
 cp /tmp/kian-serial-transcript.txt "${OUTDIR}/" 2>/dev/null || true
-for f in /tmp/kian-desktop-1.png /tmp/kian-desktop-2.png; do
+for f in /tmp/kian-desktop-1.ppm /tmp/kian-desktop-2.ppm; do
     if [[ -s "$f" ]]; then
         cp "$f" "${OUTDIR}/"
+        if command -v pnmtopng >/dev/null 2>&1; then
+            pnmtopng < "$f" > "${OUTDIR}/$(basename "${f%.ppm}").png" 2>/dev/null \
+                && echo "CONVERTED $(basename "${f%.ppm}").png $(stat -c%s "${OUTDIR}/$(basename "${f%.ppm}").png") bytes" >> "${SUMMARY}" \
+                || echo "CONVERT_FAILED for $f" >> "${SUMMARY}"
+        fi
         echo "ARTIFACT $(basename "$f") $(stat -c%s "$f") bytes" >> "${SUMMARY}"
+    else
+        echo "MISSING_SCREENSHOT $f (monitor reply above tells why)" >> "${SUMMARY}"
     fi
 done
 

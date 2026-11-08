@@ -33,7 +33,7 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -Syu --noconfirm archiso grub syslinux mtools dosfstools \
-            qemu-desktop expect socat
+            qemu-desktop expect socat netpbm
 
       - name: Profile sanity checks
         run: |
