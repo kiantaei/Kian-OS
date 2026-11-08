@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- Kian OS window manager: dark Materia theme, 2 virtual desktops. -->
+
+<channel name="xfwm4" version="1.0">
+  <property name="theme" type="string" value="Materia-dark-compact"/>
+  <property name="workspace_count" type="int" value="2"/>
+  <property name="wrap_workspaces" type="bool" value="true"/>
+  <property name="show_dock_shadow" type="bool" value="false"/>
+  <property name="titleless_maximized_windows" type="bool" value="false"/>
+</channel>

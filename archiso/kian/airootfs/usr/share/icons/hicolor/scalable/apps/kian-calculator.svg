@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <rect x="9" y="4" width="30" height="40" rx="5" fill="#1A2B4A"/>
+  <rect x="13" y="8" width="22" height="9" rx="2" fill="#0C0C0C"/>
+  <text x="31" y="15.5" font-family="DejaVu Sans, sans-serif" font-size="7" fill="#E5E5E5" text-anchor="end">123</text>
+  <g fill="#0078D4">
+    <circle cx="16" cy="23" r="2.6"/><circle cx="24" cy="23" r="2.6"/><circle cx="32" cy="23" r="2.6"/>
+    <circle cx="16" cy="30" r="2.6"/><circle cx="24" cy="30" r="2.6"/>
+  </g>
+  <circle cx="32" cy="30" r="2.6" fill="#FF8C00"/>
+  <g fill="#4DA3FF">
+    <circle cx="16" cy="37" r="2.6"/><circle cx="24" cy="37" r="2.6"/>
+  </g>
+  <circle cx="32" cy="37" r="2.6" fill="#FF8C00"/>
+</svg>

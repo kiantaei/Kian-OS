@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Xenox Browser
+GenericName=Web Browser
+Comment=Kian OS browser — Chromium engine with the Kian profile
+Exec=xenox %u
+TryExec=xenox
+Icon=kian-xenox
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml_xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+StartupWMClass=Chromium

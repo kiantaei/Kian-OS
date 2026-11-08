@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=File Manager
+GenericName=File Browser
+Comment=Browse the Kian OS filesystem
+Exec=thunar %u
+Icon=kian-files
+Terminal=false
+Categories=System;Utility;Core;FileManager;
+StartupNotify=true

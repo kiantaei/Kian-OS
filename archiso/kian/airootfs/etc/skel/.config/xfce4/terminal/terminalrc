@@ -1,0 +1,12 @@
+[Configuration]
+; Kian Terminal — dark look (#0C0C0C background, as in the legacy desktop)
+FontName=DejaVu Sans Mono 11
+Scrolling=1
+ScrollingOnOutput=FALSE
+ScrollbackLines=2048
+ColorForeground=#E5E5E5
+ColorBackground=#0C0C0C
+ColorCursor=#0078D4
+ColorCursorUseDefault=FALSE
+TabActivityColor=#0078D4
+BoldIsBright=FALSE

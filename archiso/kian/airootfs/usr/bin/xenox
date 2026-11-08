@@ -1,0 +1,25 @@
+#!/bin/bash
+# Xenox Browser — Kian OS's browser.
+#
+# HONEST ARCHITECTURE (no faking):
+#   Xenox is a Kian OS profile of the *Chromium engine*. The engine is real
+#   Chromium (rendering, JS, networking, TLS all real). What Kian OS adds is
+#   its own profile directory, start page and branding. Porting the legacy
+#   Xenox C++ UI onto Chromium is future work (see README.md).
+
+set -eu
+
+PROFILE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/xenox"
+START_PAGE="file:///usr/share/kian/xenox/start.html"
+
+if [ $# -eq 0 ]; then
+    set -- "$START_PAGE"
+fi
+
+exec /usr/bin/chromium \
+    --user-data-dir="$PROFILE_DIR" \
+    --no-first-run \
+    --no-default-browser-check \
+    --no-crash-upload \
+    --start-maximized \
+    "$@"

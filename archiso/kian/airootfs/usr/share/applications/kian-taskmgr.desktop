@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Task Manager
+GenericName=Process Manager
+Comment=Monitor running processes and system resources
+Exec=xfce4-taskmanager
+Icon=kian-taskmgr
+Terminal=false
+Categories=System;Utility;Monitor;
+StartupNotify=true
