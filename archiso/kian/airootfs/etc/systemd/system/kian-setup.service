@@ -1,0 +1,12 @@
+[Unit]
+Description=Kian OS live user setup (creates the kian account and home)
+After=systemd-sysusers.service local-fs.target
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/kian-setup
+
+[Install]
+WantedBy=multi-user.target

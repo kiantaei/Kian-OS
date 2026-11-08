@@ -1,0 +1,38 @@
+#!/bin/bash
+# Kian OS — live session user setup.
+# Creates the real `kian` user account (uid 1000, bash, wheel for sudo),
+# locks direct root login (never run as root — use sudo), seeds the home
+# directory from /etc/skel and ensures the standard XDG folders exist.
+set -euo pipefail
+
+# --- Real user account ------------------------------------------------------
+if ! getent passwd kian >/dev/null; then
+    useradd -m -u 1000 -c "Kian OS user" -s /bin/bash kian
+fi
+
+# Groups: wheel => sudo access; the rest are standard desktop groups.
+usermod -aG wheel,users,audio,video,storage,optical,input kian 2>/dev/null || true
+
+# Live medium default password (kian / kian). Change it with `passwd`
+# after installing Kian OS to disk.
+echo 'kian:kian' | chpasswd
+
+# Root must not be logged into directly; privilege escalation is sudo.
+usermod -L root 2>/dev/null || true
+
+# --- Home directory ---------------------------------------------------------
+HOME_DIR=/home/kian
+if [ ! -d "${HOME_DIR}" ]; then
+    mkdir -p "${HOME_DIR}"
+    cp -a /etc/skel/. "${HOME_DIR}/"
+fi
+# Make sure every file in the home is owned by kian (never root).
+chown -R kian:kian "${HOME_DIR}"
+
+for d in Desktop Documents Downloads Music Pictures Videos; do
+    if [ ! -d "${HOME_DIR}/${d}" ]; then
+        install -d -m 755 -o kian -g kian "${HOME_DIR}/${d}"
+    fi
+done
+
+exit 0

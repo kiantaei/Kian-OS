@@ -1,0 +1,86 @@
+#
+# Kian OS package list (x86_64).
+# Every package name was verified against https://archlinux.org/packages/
+# at migration time. neofetch, arc-theme and xf86-video-vmware no longer
+# exist in the repositories; their maintained replacements are used instead
+# (fastfetch, Materia, modesetting+vmwgfx) — see README.md.
+#
+
+# ---- Base system (real Linux kernel, systemd, GNU userland, pacman) ----
+base
+base-devel
+linux
+linux-firmware
+intel-ucode
+amd-ucode
+mkinitcpio
+mkinitcpio-archiso
+grub
+syslinux
+efibootmgr
+sudo
+
+# ---- Networking (VMware NAT / QEMU user-mode / Ethernet: DHCP out of the box) ----
+networkmanager
+network-manager-applet
+
+# ---- X11 + XFCE desktop (Kian-branded via airootfs overlay) ----
+xorg-server
+xf86-input-libinput
+xf86-input-vmmouse
+xf86-video-vesa
+lightdm
+lightdm-gtk-greeter
+exo
+garcon
+thunar
+thunar-volman
+tumbler
+gvfs
+xfce4-appfinder
+xfce4-panel
+xfce4-power-manager
+xfce4-session
+xfce4-settings
+xfce4-terminal
+xfconf
+xfdesktop
+xfwm4
+xfce4-whiskermenu-plugin
+xfce4-taskmanager
+xdg-user-dirs
+xdg-utils
+polkit-gnome
+materia-gtk-theme
+papirus-icon-theme
+ttf-liberation
+ttf-dejavu
+noto-fonts
+
+# ---- Applications ----
+chromium
+mousepad
+galculator
+
+# ---- Preinstalled developer tools (all real) ----
+git
+python
+nano
+bash-completion
+htop
+tree
+man-db
+
+# ---- System information (neofetch command kept via /usr/bin/neofetch wrapper) ----
+fastfetch
+
+# ---- Virtualization guest agents (VMware is the primary target) ----
+open-vm-tools
+qemu-guest-agent
+
+# ---- Real installer for installing Kian OS to a disk ----
+archinstall
+
+# ---- Filesystem tools needed for installation ----
+dosfstools
+e2fsprogs

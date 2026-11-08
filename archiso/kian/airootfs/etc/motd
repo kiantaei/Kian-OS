@@ -1,0 +1,16 @@
+
+  _  __    _    ___  ___  ____  ___
+ | |/ /   / \  / __||_ _||  _ \| __|
+ | ' <    / _ \ \__ \ | | | | | | _|
+ |_|\_\  /_/ \_\|___/|___|_| |_|___|  0.4.0 "Horizon" (Linux-based)
+
+Kian OS is a Linux-based desktop operating system (Arch Linux base).
+
+  * Real pacman:   pacman -Syu          (update)
+                   pacman -S <pkg>      (install — needs internet)
+  * Real Bash:     every GNU coreutils command works
+  * Sudo:          kian is in wheel; password is the user password
+  * Login:         user `kian`, password `kian` (live session default)
+  * Root login is disabled; privilege escalation is via sudo only.
+
+Thanks for trying Kian OS — https://github.com/kiantaei/Kian-OS

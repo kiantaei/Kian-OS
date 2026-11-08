@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2034
+
+# Kian OS 0.4.0 "Horizon" — Linux-based desktop operating system.
+# Built with archiso (https://gitlab.archlinux.org/archlinux/archiso).
+# The profile is derived from the official archiso "releng" profile.
+
+iso_name="kian-os"
+iso_label="KIAN_OS_040"
+iso_publisher="Kian OS <https://github.com/kiantaei/Kian-OS>"
+iso_application="Kian OS Live/Desktop Medium (Linux-based)"
+iso_version="0.4.0"
+install_dir="kian"
+bootmodes=('bios.syslinux' 'uefi.grub')
+pacman_conf="pacman.conf"
+airootfs_image_type="squashfs"
+airootfs_image_tool_options=('-comp' 'xz' '-Xbcj' 'x86' '-b' '1M' '-Xdict-size' '1M')
+# Serial console is enabled so the ISO can be verified programmatically in CI
+# (QEMU) and debugged headlessly; tty0 stays the primary console on screen.
+kernel_params_x86_64="console=ttyS0,115200n8 console=tty0"
+file_permissions=(
+  ["/etc/sudoers.d/kian-wheel"]="0:0:440"
+  ["/usr/local/bin/kian-setup"]="0:0:755"
+  ["/usr/bin/xenox"]="0:0:755"
+  ["/usr/bin/neofetch"]="0:0:755"
+)

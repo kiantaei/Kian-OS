@@ -1,0 +1,4 @@
+# Kian OS — sudo policy.
+# Members of `wheel` may run anything as any user after entering their own
+# password. Kian OS never runs the desktop as root.
+%wheel ALL=(ALL:ALL) ALL
