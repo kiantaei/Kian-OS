@@ -101,6 +101,17 @@ systemctl is-active --quiet lightdm && ok "desktop: lightdm active" || bad "desk
 pgrep -x Xorg >/dev/null && ok "desktop: Xorg running" || bad "desktop: Xorg not running"
 pgrep -x xfce4-session >/dev/null && ok "desktop: XFCE session running" || bad "desktop: XFCE session not running"
 
+# --- desktop configuration evidence (always printed; panel debugging) ---
+echo "EVIDENCE: skel panel position line:"
+grep -m1 'name="position"' /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml || echo "  (missing in /etc/skel)"
+echo "EVIDENCE: home panel position line:"
+grep -m1 'name="position"' /home/kian/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml 2>/dev/null || echo "  (missing in /home/kian)"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
+echo "EVIDENCE: xfconf live position: $(xfconf-query -c xfce4-panel -p /panels/panel-1/position 2>&1 | tail -1)"
+echo "EVIDENCE: processes: $(ps -e -o comm= | grep -E 'xfce4-panel|xfwm4|xfdesktop|xfce4-session' | sort | tr '\n' ' ')"
+grep -q 'p=12' /home/kian/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml 2>/dev/null \
+    && ok "panel: home config has bottom position (p=12)" || bad "panel: home config missing p=12"
+
 # 8. Timezone (Kian identity)
 [[ "$(readlink -f /etc/localtime)" == *Asia/Tehran* ]] && ok "timezone: Asia/Tehran" || bad "timezone: $(readlink -f /etc/localtime 2>/dev/null || echo none)"
 
