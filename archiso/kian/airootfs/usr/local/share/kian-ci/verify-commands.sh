@@ -111,6 +111,12 @@ echo "EVIDENCE: xfconf live position: $(xfconf-query -c xfce4-panel -p /panels/p
 echo "EVIDENCE: processes: $(ps -e -o comm= | grep -E 'xfce4-panel|xfwm4|xfdesktop|xfce4-session' | sort | tr '\n' ' ')"
 grep -q 'p=12' /home/kian/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml 2>/dev/null \
     && ok "panel: home config has bottom position (p=12)" || bad "panel: home config missing p=12"
+# The LIVE value is what matters (the panel can rewrite its own position
+# after screen mode changes; kian-panel-position-fix re-docks it ~8s in).
+sleep 12
+LIVE_POS="$(xfconf-query -c xfce4-panel -p /panels/panel-1/position 2>&1 | tail -1)"
+echo "EVIDENCE: xfconf live position (after fix): $LIVE_POS"
+[[ "$LIVE_POS" == "p=12"* ]] && ok "panel: live position docked bottom (p=12)" || bad "panel: live position is '$LIVE_POS' (expected p=12...)"
 
 # 8. Timezone (Kian identity)
 [[ "$(readlink -f /etc/localtime)" == *Asia/Tehran* ]] && ok "timezone: Asia/Tehran" || bad "timezone: $(readlink -f /etc/localtime 2>/dev/null || echo none)"

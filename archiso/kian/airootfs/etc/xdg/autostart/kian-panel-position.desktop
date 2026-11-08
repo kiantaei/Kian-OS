@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Kian OS panel position
+Comment=Ensure the taskbar stays docked at the bottom after mode changes
+Exec=/usr/local/bin/kian-panel-position-fix
+Terminal=false
+NoDisplay=true
