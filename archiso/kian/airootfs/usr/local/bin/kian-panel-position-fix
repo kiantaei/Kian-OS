@@ -7,8 +7,9 @@
 # (p=0;x=100;y=30 was observed live). Re-docking the panel through xfconf
 # is the supported, live-applied fix; it is a no-op if the panel already
 # sits at the bottom (p=12 = SNAP_POSITION_S in xfce4-panel 4.20).
-sleep 8
+sleep "${KIAN_PANEL_FIX_DELAY:-8}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
 xfconf-query -c xfce4-panel -p /panels/panel-1/position -n -t string -s "p=12;x=0;y=0" >/dev/null 2>&1
 xfconf-query -c xfce4-panel -p /panels/panel-1/position-locked -n -t bool -s true >/dev/null 2>&1
+touch /tmp/kian-panel-fix-ran
 exit 0

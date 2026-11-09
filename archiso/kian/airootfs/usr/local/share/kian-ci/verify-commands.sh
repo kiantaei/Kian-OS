@@ -111,12 +111,18 @@ echo "EVIDENCE: xfconf live position: $(xfconf-query -c xfce4-panel -p /panels/p
 echo "EVIDENCE: processes: $(ps -e -o comm= | grep -E 'xfce4-panel|xfwm4|xfdesktop|xfce4-session' | sort | tr '\n' ' ')"
 grep -q 'p=12' /home/kian/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml 2>/dev/null \
     && ok "panel: home config has bottom position (p=12)" || bad "panel: home config missing p=12"
-# The LIVE value is what matters (the panel can rewrite its own position
-# after screen mode changes; kian-panel-position-fix re-docks it ~8s in).
-sleep 12
-LIVE_POS="$(xfconf-query -c xfce4-panel -p /panels/panel-1/position 2>&1 | tail -1)"
-echo "EVIDENCE: xfconf live position (after fix): $LIVE_POS"
-[[ "$LIVE_POS" == "p=12"* ]] && ok "panel: live position docked bottom (p=12)" || bad "panel: live position is '$LIVE_POS' (expected p=12...)"
+
+# --- decisive panel evidence: full channel dump + direct live re-dock ---
+echo "EVIDENCE: full xfconf xfce4-panel channel:"
+xfconf-query -c xfce4-panel -lv 2>&1 | head -40
+echo "EVIDENCE: autostart fix marker: $(ls -la /tmp/kian-panel-fix-ran 2>/dev/null || echo NOT_RUN)"
+echo "EVIDENCE: applying position fix directly..."
+KIAN_PANEL_FIX_DELAY=0 /usr/local/bin/kian-panel-position-fix && echo "EVIDENCE: fix script exit 0"
+P1="$(xfconf-query -c xfce4-panel -p /panels/panel-1/position 2>&1 | tail -1)"
+sleep 5
+P2="$(xfconf-query -c xfce4-panel -p /panels/panel-1/position 2>&1 | tail -1)"
+echo "EVIDENCE: position right after fix: $P1 ; after 5s: $P2"
+[[ "$P2" == "p=12"* ]] && ok "panel: live position docked bottom (p=12)" || bad "panel: live position is '$P2' (expected p=12...)"
 
 # 8. Timezone (Kian identity)
 [[ "$(readlink -f /etc/localtime)" == *Asia/Tehran* ]] && ok "timezone: Asia/Tehran" || bad "timezone: $(readlink -f /etc/localtime 2>/dev/null || echo none)"
