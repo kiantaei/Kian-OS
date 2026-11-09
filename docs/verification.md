@@ -25,7 +25,7 @@ boot-test summary, desktop screenshots.
 | 1 | Boots into a real Linux kernel (not a lookalike) | CI: QEMU reaches the serial `kian-os login:` prompt; `uname -r` printed inside the booted system; GRUB (UEFI) / syslinux (BIOS) menus ship in the ISO |
 | 2 | Login screen with a real user account | CI: real PAM login `kian`/`kian` over serial; LightDM greeter on logout (manual); root account locked |
 | 3 | Desktop starts (real X session) | CI: `systemctl is-active lightdm`, `pgrep Xorg`, `pgrep xfce4-session` + desktop screenshot |
-| 4 | Taskbar works | CI screenshot shows the XFCE panel with Whisker start menu + window buttons; manual: click = focus/minimize, right-click menu, systray, clock flyout |
+| 4 | Taskbar works | CI: live xfconf check proves the panel is docked bottom (`p=12`) and the desktop **screenshot** (CI artifact) shows the 44px Kian taskbar with the Start button, systray and clock; manual: click = focus/minimize, right-click menu, calendar flyout |
 | 5 | Terminal runs real commands | CI: `bash --version`, GNU coreutils used throughout the verify script inside the booted OS |
 | 6 | pacman really installs packages | CI: `pacman -Sy` + real `pacman -S tree` over the network inside the booted OS (`CHECK_PASS`/`CHECK_NET_FAIL` honestly reported) |
 | 7 | GCC compiles and runs code | CI: compiles + executes a C program and a C++ program inside the booted OS |
