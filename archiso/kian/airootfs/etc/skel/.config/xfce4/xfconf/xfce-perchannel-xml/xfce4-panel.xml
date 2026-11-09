@@ -13,24 +13,31 @@
 <channel name="xfce4-panel" version="1.0">
   <property name="configver" type="int" value="2"/>
   <property name="panels" type="array">
+    <!-- The array MUST list the panel ids as explicit <value> entries
+         (see xfce4-panel's own migrate/default.xml.in). Without them the
+         panel sees an empty panel list, creates a floating fallback panel
+         (p=0;x=100;y=30, size 48) and ignores the panel-1 subtree. -->
+    <value type="int" value="1"/>
     <property name="panel-1" type="empty">
+      <!-- xfce4-panel 4.20 position format: p=N;x=X;y=Y (SnapPosition 12 = S,
+           the bottom edge). The legacy "p=6;o=0" syntax no longer parses. -->
       <property name="position" type="string" value="p=12;x=0;y=0"/>
       <property name="position-locked" type="bool" value="true"/>
-      <property name="length" type="double" value="100.0"/>
+      <property name="length" type="uint" value="100"/>
       <property name="size" type="uint" value="44"/>
       <property name="background-style" type="uint" value="1"/>
       <property name="background-rgba" type="array">
-        <property name="1" type="double" value="0.101960784313725"/>
-        <property name="2" type="double" value="0.168627450980392"/>
-        <property name="3" type="double" value="0.290196078431373"/>
-        <property name="4" type="double" value="0.920000000000000"/>
+        <value type="double" value="0.101960784313725"/>
+        <value type="double" value="0.168627450980392"/>
+        <value type="double" value="0.290196078431373"/>
+        <value type="double" value="0.920000000000000"/>
       </property>
       <property name="plugin-ids" type="array">
-        <property name="1" type="int" value="1"/>
-        <property name="2" type="int" value="2"/>
-        <property name="3" type="int" value="3"/>
-        <property name="4" type="int" value="4"/>
-        <property name="5" type="int" value="5"/>
+        <value type="int" value="1"/>
+        <value type="int" value="2"/>
+        <value type="int" value="3"/>
+        <value type="int" value="4"/>
+        <value type="int" value="5"/>
       </property>
     </property>
   </property>
