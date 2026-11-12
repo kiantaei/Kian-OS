@@ -61,6 +61,36 @@ if [ ! -e "$GFXDIR/bootlogo.tar.gz" ]; then
     rm -rf "$TMPCPIO"
 fi
 
+# rsvg compatibility shim: live-build renders the syslinux splash with the
+# OLD rsvg CLI (`rsvg --format png --height H --width W input.svg output.png`
+# — output as a positional argument), but noble's librsvg2-bin ships only
+# rsvg-convert, which takes the output via -o and has no `rsvg` binary.
+# Translate: the last two positional arguments are input and output.
+RSVG_SHIM='/usr/local/bin/rsvg'
+cat > "$RSVG_SHIM" <<'RSVGEOF'
+#!/bin/sh
+# Kian OS shim: old rsvg CLI -> rsvg-convert (librsvg2-bin, noble).
+count=$#
+if [ "$count" -lt 2 ]; then
+    exec /usr/bin/rsvg-convert "$@"
+fi
+in=""
+out=""
+i=1
+while [ "$i" -le "$count" ]; do
+    case "$i" in
+        $((count - 1))) in="$1" ;;
+        "$count")       out="$1" ;;
+        *)              set -- "$@" "$1" ;;   # keep leading flags in order
+    esac
+    shift
+    i=$((i + 1))
+done
+exec /usr/bin/rsvg-convert "$@" -o "$out" "$in"
+RSVGEOF
+chmod 755 "$RSVG_SHIM"
+ln -sf /usr/local/bin/rsvg /usr/bin/rsvg
+
 # Apt hygiene for the live image (live-build cleans the cache too, but be
 # certain — the ISO must stay lean).
 apt-get clean >/dev/null 2>&1 || true
