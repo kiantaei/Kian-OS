@@ -47,7 +47,7 @@ command -v lb >/dev/null 2>&1 || die "live-build not found. Install: apt-get ins
 # ---- build ------------------------------------------------------------------
 cd "${PROFILE}"
 lb clean --purge >/dev/null 2>&1 || true
-./auto/config
+sh ./auto/config
 lb build
 
 [[ -f binary.iso ]] || die "lb build finished without binary.iso"
