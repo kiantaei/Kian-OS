@@ -16,6 +16,7 @@ lb config noauto \
     --archive-areas "main restricted universe multiverse" \
     --bootstrap-flavour minbase \
     --initramfs live-boot \
+    --initsystem systemd \
     --linux-flavours generic \
     --linux-packages linux-image \
     --binary-images iso-hybrid \
