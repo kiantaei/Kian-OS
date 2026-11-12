@@ -69,10 +69,13 @@ calamares
 os-prober
 python3-parted
 
-# ---- bootloader stack (both firmwares; grub-pc preseeded non-interactive) ----
+# ---- bootloader stack (both firmwares) ----
+# grub-efi-amd64 provides /usr/sbin/grub-install; grub-pc-bin provides the
+# i386-pc modules so the same binary handles BIOS targets
+# (--target=i386-pc). grub-pc itself CONFLICTS with grub-efi-amd64 — never
+# ship both.
 grub-efi-amd64
 grub-efi-amd64-bin
-grub-pc
 grub-pc-bin
 shim-signed
 efibootmgr

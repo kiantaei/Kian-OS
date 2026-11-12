@@ -5,14 +5,6 @@
 set -e
 echo "[kian] chroot hook: desktop + installer plumbing"
 
-# grub-pc asks which device to install to via debconf; preseed it to nothing
-# so the build never blocks. kian-install/calamares run grub-install with an
-# explicit target on the installed system.
-debconf-set-selections <<'EOF'
-grub-pc grub-pc/install_devices multiselect
-grub-pc grub-pc/install_devices_empty boolean true
-EOF
-
 # LightDM is the display manager; make the symlink certain even if another
 # DM was pulled in by a dependency.
 if command -v systemctl >/dev/null 2>&1; then
