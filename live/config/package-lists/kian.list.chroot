@@ -55,8 +55,6 @@ fonts-noto-core
 falkon
 
 # ---- desktop plumbing / welcome GUI / automirror ----
-linux-firmware
-
 xdg-user-dirs
 xdg-utils
 policykit-1
