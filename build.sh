@@ -50,8 +50,15 @@ lb clean --purge >/dev/null 2>&1 || true
 sh ./auto/config
 lb build
 
-[[ -f binary.iso ]] || die "lb build finished without binary.iso"
-mv -f binary.iso "${ISO_NAME}"
+# live-build names the image binary.iso for --binary-images iso and
+# binary.hybrid.iso for --binary-images iso-hybrid (which we use).
+if [[ -f binary.hybrid.iso ]]; then
+    mv -f binary.hybrid.iso "${ISO_NAME}"
+elif [[ -f binary.iso ]]; then
+    mv -f binary.iso "${ISO_NAME}"
+else
+    die "lb build finished without binary.hybrid.iso/binary.iso"
+fi
 sha256sum "${ISO_NAME}" > "${ISO_NAME}.sha256"
 
 say "done. artifacts:"
