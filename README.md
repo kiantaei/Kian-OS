@@ -62,6 +62,14 @@ sudo pacman -S archiso grub syslinux mtools dosfstools
 ./build.sh --check          # syntax sanity checks only
 ```
 
+**On Windows** mkarchiso cannot run natively; `build.ps1` builds the same ISO
+inside Docker Desktop (Linux containers) or an Arch Linux WSL distro and leaves
+it in `build\out\`:
+
+```powershell
+.\build.ps1
+```
+
 **Continuous integration:** every push to `main` triggers
 [`.github/workflows/build-iso.yml`](.github/workflows/build-iso.yml), which
 builds the ISO inside an `archlinux:base-devel` container, runs a **real

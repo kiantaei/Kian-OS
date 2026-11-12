@@ -14,7 +14,11 @@ install_dir="kian"
 bootmodes=('bios.syslinux' 'uefi.grub')
 pacman_conf="pacman.conf"
 airootfs_image_type="squashfs"
-airootfs_image_tool_options=('-comp' 'xz' '-Xbcj' 'x86' '-b' '1M' '-Xdict-size' '1M')
+# zstd instead of xz: the live system decompresses the squashfs image on
+# every boot, and zstd is several times faster to decompress than
+# xz -9e while staying a similar size. This is the single biggest boot-time
+# win on the live medium.
+airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '15' '-b' '1M')
 # Serial console is enabled so the ISO can be verified programmatically in CI
 # (QEMU) and debugged headlessly; tty0 stays the primary console on screen.
 kernel_params_x86_64="console=ttyS0,115200n8 console=tty0"

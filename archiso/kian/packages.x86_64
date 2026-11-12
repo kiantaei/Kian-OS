@@ -26,6 +26,10 @@ network-manager-applet
 
 # ---- X11 + XFCE desktop (Kian-branded via airootfs overlay) ----
 xorg-server
+# Explicit OpenGL stack for the modesetting DDX (glamor). Already pulled in by
+# chromium, but the desktop depends on it, so it is listed deliberately.
+mesa
+xorg-xrandr
 xf86-input-libinput
 xf86-input-vmmouse
 xf86-video-vesa

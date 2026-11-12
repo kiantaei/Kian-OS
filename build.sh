@@ -21,7 +21,6 @@ die() { printf '\033[1;31m[kian-build] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ---- sanity checks ----------------------------------------------------------
 [[ -d "${PROFILE}" ]] || die "profile not found: ${PROFILE}"
-command -v mkarchiso >/dev/null 2>&1 || die "mkarchiso not found. Install: pacman -S archiso grub syslinux"
 
 say "checking profile scripts ..."
 bash -n "${PROFILE}/profiledef.sh" || die "profiledef.sh has syntax errors"
@@ -32,6 +31,7 @@ if [[ "${1:-}" == "--check" ]]; then
     exit 0
 fi
 
+command -v mkarchiso >/dev/null 2>&1 || die "mkarchiso not found. Install: pacman -S archiso grub syslinux (Windows: see build.ps1)"
 [[ $(id -u) -eq 0 ]] || die "mkarchiso needs root: run with sudo"
 
 say "building Kian OS ISO (this downloads Arch packages; takes a while) ..."
