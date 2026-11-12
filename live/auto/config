@@ -29,6 +29,7 @@ lb config noauto \
     --iso-application "Kian OS 1.0 Live/Installer Medium (Ubuntu 24.04 base)" \
     --iso-preparer "Kian OS live-build" \
     --memtest none \
+    --syslinux-theme live-build \
     --win false \
     --source false \
     --apt-recommends false \
