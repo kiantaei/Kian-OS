@@ -9,9 +9,13 @@ Kian OS is a Linux-based desktop operating system (Arch Linux base).
   * Real pacman:   pacman -Syu          (update)
                    pacman -S <pkg>      (install — needs internet)
   * Real Bash:     every GNU coreutils command works
-  * Install:       sudo kianinstall     (Kian OS installer — our own fork of
-                                        archinstall, works offline; set Disk first)
-                   sudo kian-install    (same installer + auto Kian branding after)
+  * Install:       sudo kian-install    (Kian OS's OWN installer — asks only
+                                        mirror region + timezone; no archinstall;
+                                        auto-detects the disk, brands everything)
+                   sudo kianinstall     (advanced: Kian's archinstall fork, full menu)
+  * Persist:       sudo kian-persist    (save your live session FOR REAL: files,
+                                        /etc, pacman installs survive reboot —
+                                        then boot the "persistent session" entry)
   * Branding:      sudo kian-apply      (Kian files onto an installed Arch)
   * Sudo:          kian is in wheel; password is the user password
   * Login:         user `kian`, password `kian` (live session default)

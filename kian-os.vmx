@@ -23,8 +23,15 @@ ide1:0.deviceType = "cdrom-image"
 ide1:0.startConnected = "TRUE"
 bios.bootOrder = "cdrom"
 boot.order = "cdrom"
-bios.bootDelay = "3000"
+# No firmware boot delay: with bootOrder=cdrom the ISO menu itself is the
+# selector (1 s timeout) — waiting 3 s in the BIOS adds nothing but boot time.
+bios.bootDelay = "0"
 firmware = "bios"
+# To boot Kian OS in UEFI mode instead (the ISO supports both), replace the
+# line above with BOTH of these — Secure Boot must stay off, the Kian ISO
+# ships no signed shim, and an enabled Secure Boot gives a black screen:
+# firmware = "efi"
+# efi.secureBoot.enabled = "FALSE"
 tools.syncTime = "TRUE"
 sound.autodetect = "TRUE"
 ethernet0.addressType = "generated"

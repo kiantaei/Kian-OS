@@ -21,13 +21,18 @@ airootfs_image_type="squashfs"
 airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '15' '-b' '1M')
 # Serial console is enabled so the ISO can be verified programmatically in CI
 # (QEMU) and debugged headlessly; tty0 stays the primary console on screen.
-kernel_params_x86_64="console=ttyS0,115200n8 console=tty0"
+# cow_spacesize=2G: the default (non-persistent) session writes to a RAM
+# overlay that archiso caps at 256M by default — too small to actually create
+# files. 2G grows on demand and is safe with 4 GB VMs. Real persistence is a
+# separate boot entry (cow_label=KIANPERSIST, see syslinux/grub + kian-persist).
+kernel_params_x86_64="console=ttyS0,115200n8 console=tty0 cow_spacesize=2G"
 file_permissions=(
   ["/etc/sudoers.d/kian-wheel"]="0:0:440"
   ["/usr/local/bin/kian-setup"]="0:0:755"
   ["/usr/local/bin/kian-panel-position-fix"]="0:0:755"
   ["/usr/local/bin/kian-trust-desktop"]="0:0:755"
   ["/usr/local/bin/kian-install"]="0:0:755"
+  ["/usr/local/bin/kian-persist"]="0:0:755"
   ["/usr/local/bin/kianinstall"]="0:0:755"
   ["/usr/local/bin/kian-apply"]="0:0:755"
   # Desktop launchers ship executable so xfdesktop never has to ask whether

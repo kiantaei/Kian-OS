@@ -142,6 +142,31 @@ else
     bad "kianinstall: --version produced no output (import failure?)"
 fi
 
+# 8b. kian-install — Kian's OWN installer (no archinstall) + kian-persist
+if command -v pacstrap >/dev/null && command -v genfstab >/dev/null && command -v arch-chroot >/dev/null; then
+    ok "kian-install: pacstrap/genfstab/arch-chroot available (arch-install-scripts)"
+else
+    bad "kian-install: arch-install-scripts missing"
+fi
+command -v parted >/dev/null && ok "kian-install: parted available" || bad "kian-install: parted missing"
+KIH="$(kian-install --help 2>/dev/null | head -8)"
+echo "$KIH" | grep -q "Kian OS installer" \
+    && ok "kian-install: --help prints (own installer, no archinstall)" || bad "kian-install: --help output unexpected"
+KPH="$(kian-persist --help 2>/dev/null | head -8)"
+echo "$KPH" | grep -q "persistence" \
+    && ok "kian-persist: --help prints (real live persistence)" || bad "kian-persist: --help output unexpected"
+PERSIST_SHIPPED=0
+for cfg in /run/archiso/bootmnt/*/boot/syslinux/syslinux.cfg /run/archiso/bootmnt/*/boot/grub/grub.cfg; do
+    [ -f "$cfg" ] || continue
+    grep -q "cow_label=KIANPERSIST" "$cfg" && PERSIST_SHIPPED=1
+done
+[ "$PERSIST_SHIPPED" = "1" ] && ok "persist: persistent boot entry shipped (cow_label=KIANPERSIST)" || bad "persist: persistent boot entry missing in boot config"
+if grep -q "cow_spacesize=2G" /proc/cmdline 2>/dev/null; then
+    ok "persist: live overlay space is 2G (default session can create files)"
+else
+    bad "persist: cow_spacesize=2G missing from the kernel cmdline"
+fi
+
 # 9. Timezone (Kian identity)
 [[ "$(readlink -f /etc/localtime)" == *Asia/Tehran* ]] && ok "timezone: Asia/Tehran" || bad "timezone: $(readlink -f /etc/localtime 2>/dev/null || echo none)"
 

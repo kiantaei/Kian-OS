@@ -1,0 +1,143 @@
+#!/bin/bash
+# Kian OS — real persistence for the live session.
+#
+# A normal live session keeps every change in RAM (a small overlay that is
+# thrown away at shutdown): files you make "in live" disappear on reboot.
+# This tool fixes that. It creates an ext4 partition labelled KIANPERSIST;
+# the "Kian OS — persistent session" boot entry then mounts it as the live
+# overlay (archiso's cow device), so EVERYTHING in the session — files in
+# /home/kian, /etc changes, packages installed with pacman — is written to
+# that partition and really survives reboots. Not RAM. Not tmpfs. Disk.
+#
+# USAGE
+#   sudo kian-persist              # auto-pick the target disk (see below)
+#   sudo kian-persist /dev/sdX     # erase THIS disk and use it for persistence
+#   sudo kian-persist --help
+#
+# Auto-pick: empty unpartitioned disks first (a new VMware/QEMU virtual disk),
+# then the largest disk that is NOT the boot medium. A countdown with a loud
+# warning runs before anything is erased — Ctrl+C aborts.
+#
+# After creating the partition: REBOOT and choose
+#   "Kian OS 0.4.0 — persistent session"
+# in the boot menu. The plain entry stays non-persistent on purpose (so the
+# ISO always boots everywhere, even on machines without a persist partition).
+
+set -uo pipefail
+
+LABEL="KIANPERSIST"
+
+say()  { printf '\033[1;34m[kian-persist]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[kian-persist]\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31m[kian-persist] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+    esac
+done
+
+[ "$(id -u)" -eq 0 ] || die "must run as root:  sudo kian-persist"
+command -v parted >/dev/null || die "parted not found on this ISO"
+command -v mkfs.ext4 >/dev/null || die "mkfs.ext4 not found on this ISO"
+
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+        /dev/*) DEVICE_ARG="$arg" ;;
+        *) die "unknown argument: $arg (try --help)" ;;
+    esac
+done
+
+# --- already have a persistence store? --------------------------------------
+if [ -e "/dev/disk/by-label/${LABEL}" ]; then
+    say "a persistence store already exists: $(readlink -f /dev/disk/by-label/${LABEL})"
+    say "reboot and choose 'Kian OS 0.4.0 — persistent session' in the boot menu."
+    exit 0
+fi
+
+# --- boot medium (never erase the device the ISO is running from) ------------
+boot_medium_disk() {
+    local src parent
+    src="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null)" || return 0
+    case "$src" in
+        /dev/sr*|/dev/nvme*r*) echo "" ;;
+        *)
+            parent="$(lsblk -srno PKNAME "$src" 2>/dev/null | head -n1)"
+            [ -n "$parent" ] && echo "/dev/$parent"
+            ;;
+    esac
+}
+
+disk_is_fresh() {
+    local disk="$1"
+    [ "$(lsblk -rno TYPE "${disk}" | grep -vc '^disk$')" -eq 0 ] || return 1
+    [ -z "$(wipefs -q "$disk" 2>/dev/null)" ] && return 0 || return 1
+}
+
+DISK="${DEVICE_ARG:-}"
+if [ -z "$DISK" ]; then
+    bootdisk="$(boot_medium_disk)"
+    best_mb=0
+    while read -r path _type size model; do
+        [ "$path" = "$bootdisk" ] && continue
+        mb="$(numfmt --from=iec "${size:-0}" 2>/dev/null || echo 0)"
+        [ "$mb" -ge 8192 ] || continue        # persistence needs >= 8 GiB to be useful
+        if disk_is_fresh "$path"; then
+            if [ "$mb" -gt "$best_mb" ]; then best_mb="$mb"; DISK="$path"; DISK_SIZE="$size"; DISK_MODEL="${model:-}"; DISK_FRESH=1; fi
+        elif [ -z "$FALLBACK_DISK" ]; then
+            FALLBACK_DISK="$path|$size|${model:-}"
+        fi
+    done < <(lsblk -rno PATH,TYPE,SIZE,MODEL 2>/dev/null | awk '$2 == "disk" && $3 != "0"')
+    if [ -z "$DISK" ] && [ -n "${FALLBACK_DISK:-}" ]; then
+        DISK="${FALLBACK_DISK%%|*}"; DISK_SIZE="${FALLBACK_DISK#*|}"; DISK_SIZE="${DISK_SIZE%%|*}"; DISK_MODEL="${FALLBACK_DISK##*|}"
+        [ "$DISK_MODEL" = "$DISK_SIZE" ] && DISK_MODEL=""   # no model column present
+        warn "no empty disk found — falling back to $DISK (contains data!)"
+    fi
+    [ -n "$DISK" ] || die "no usable disk found (>= 8 GiB, not the boot medium). Attach a virtual disk, or pass one: sudo kian-persist /dev/sdX"
+fi
+[ -b "$DISK" ] || die "$DISK is not a block device"
+
+MB="$(lsblk -bno SIZE "$DISK" 2>/dev/null | awk '{printf "%d", $1/1048576}')"
+[ "${MB:-0}" -ge 8192 ] || die "$DISK is only ${MB:-?} MiB — persistence needs >= 8 GiB"
+
+# --- the erase countdown ------------------------------------------------------
+echo
+echo "==================================================================="
+echo "  EVERYTHING ON $DISK WILL BE ERASED and become the Kian OS"
+echo "  persistent-session store (partition label ${LABEL})."
+[ -z "${DEVICE_ARG:-}" ] && [ -z "${DISK_FRESH:-}" ] && echo "  (auto-picked: empty disks are preferred; this disk contains data)"
+echo "==================================================================="
+printf '\nContinuing in 8 seconds — press Ctrl+C to abort NOW, Enter to continue ... '
+read -t 8 -r _ || true
+echo
+
+# --- create the partition -----------------------------------------------------
+say "wiping $DISK and creating an ext4 partition labelled ${LABEL} ..."
+sync
+wipefs -a "$DISK" >/dev/null 2>&1 || true
+parted -s "$DISK" mklabel gpt mkpart "${LABEL}" ext4 1MiB 100% || die "partitioning failed (is $DISK in use?)"
+case "$DISK" in
+    /dev/nvme*|/dev/mmcblk*) PART="${DISK}p1" ;;
+    *) PART="${DISK}1" ;;
+esac
+sleep 1
+mkfs.ext4 -F -L "$LABEL" "$PART" || die "mkfs.ext4 failed on $PART"
+sync
+
+say "persistence store created: $PART (label ${LABEL})"
+cat <<EOF
+
+  From the NEXT boot on:
+    1. reboot (sudo reboot) and pick 'Kian OS 0.4.0 — persistent session'
+       in the boot menu,
+    2. everything you do in that session is REALLY saved on $PART —
+       /home/kian files, /etc changes, pacman installs — and comes back
+       on every reboot,
+    3. the plain 'Kian OS' boot entry stays non-persistent (RAM overlay).
+
+  Your files live on $PART. Keep backups of anything important anyway.
+EOF
+exit 0

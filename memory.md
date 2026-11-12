@@ -36,8 +36,10 @@ archive/legacy-standalone/   pre-0.4.0 from-scratch kernel/GUI (frozen, not buil
 ## Key mechanisms (don't reinvent)
 - Live user is created at boot by `kian-setup.service`
   (`/usr/local/bin/kian-setup`): useradd kian (uid 1000) + wheel + chpasswd +
-  `usermod -L root` + home seeding from `/etc/skel`.
-- Pacman works live thanks to releng's `pacman-init.service` +
+  `usermod -L root` + home seeding from `/etc/skel`. The chpasswd is gated on
+  a first-boot marker (`~/.kian-live-initialized`) so a PERSISTENT live
+  session (see below) does not reset a changed password on every boot.
+- pacman works live thanks to releng's `pacman-init.service` +
   `etc-pacman.d-gnupg.mount` (enabled in `multi-user.target.wants`).
 - Services are enabled via `.wants` symlinks inside
   `airootfs/etc/systemd/system/` (mkarchiso copies them verbatim).
@@ -45,6 +47,22 @@ archive/legacy-standalone/   pre-0.4.0 from-scratch kernel/GUI (frozen, not buil
 - CI boots the ISO with `-serial mon:stdio` and logs in over serial
   (getty enabled on ttyS0; kernel params `console=ttyS0,115200n8 console=tty0`).
 - `neofetch` command = fastfetch wrapper (neofetch was removed from Arch repos).
+- Installer: `kian-install` is Kian OS's OWN installer (no archinstall) —
+  asks exactly 2 questions (mirror region via the official mirrorlist API +
+  timezone), auto-detects the target disk (empty disks first, 10 s erase
+  countdown, `--disk /dev/sdX` override), GPT+ESP on UEFI / MBR on BIOS,
+  pacstraps the full desktop set, chroot-configures locale/timezone/user/GRUB
+  (`GRUB_DISTRIBUTOR="Kian OS"`), then `kian-apply -y /mnt`. Needs
+  `arch-install-scripts` + `parted` (in packages.x86_64). `kianinstall` (the
+  archinstall fork, vendored at /opt/kianinstall) stays as the advanced option.
+- Persistence: archiso cow mechanics verified from mkinitcpio-archiso 73
+  (`/usr/share/doc/mkinitcpio-archiso/README.bootparams`): with squashfs the
+  overlay is OVERLAYFS; `cow_label=KIANPERSIST` mounts that partition as the
+  overlay so upperdir/workdir persist; a MISSING cow device drops to an
+  emergency shell, so the persistent boot entry must NEVER be the default.
+  `kian-persist` creates the KIANPERSIST ext4 partition; persistent entries
+  exist in syslinux + grub ("persistent session"); default entry passes
+  `cow_spacesize=2G` (archiso default 256M is too small to create files).
 
 ## Honesty rules (project policy)
 - Never fabricate build or test results; CI logs are the source of truth.

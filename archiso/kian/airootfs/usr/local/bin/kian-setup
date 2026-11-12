@@ -19,7 +19,12 @@ usermod -aG wheel,users,audio,video,storage,optical,input,autologin kian 2>/dev/
 
 # Live medium default password (kian / kian). Change it with `passwd`
 # after installing Kian OS to disk.
-echo 'kian:kian' | chpasswd
+# In a PERSISTENT live session (KIANPERSIST, see kian-persist) /etc survives
+# reboots — resetting the password here would clobber a changed one every
+# boot, so it is applied only on the first session (marker file in home).
+if ! getent passwd kian >/dev/null || [ ! -f "${HOME_DIR:-/home/kian}/.kian-live-initialized" ]; then
+    echo 'kian:kian' | chpasswd
+fi
 
 # Root must not be logged into directly; privilege escalation is sudo.
 usermod -L root 2>/dev/null || true
@@ -29,6 +34,8 @@ HOME_DIR=/home/kian
 if [ ! -d "${HOME_DIR}" ]; then
     mkdir -p "${HOME_DIR}"
     cp -a /etc/skel/. "${HOME_DIR}/"
+    # first session done — the default password was just applied (see above)
+    touch "${HOME_DIR}/.kian-live-initialized"
 fi
 # Make sure every file in the home is owned by kian (never root).
 chown -R kian:kian "${HOME_DIR}"

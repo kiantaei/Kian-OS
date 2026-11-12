@@ -41,7 +41,7 @@ Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox).
 | **Apps** | Proper `.desktop` registration: Xenox Browser, Kian Terminal, File Manager (Thunar), Notepad (Mousepad), Calculator (galculator), Settings, Task Manager. |
 | **Users** | Real accounts: `kian` (uid 1000, wheel/sudo) created by `kian-setup.service`; root locked; desktop never runs as root. |
 | **Filesystem** | Real hierarchy: `/`, `/home/kian` with `Desktop/ Documents/ Downloads/ Music/ Pictures/ Videos/`. |
-| **Installer** | **kianinstall** — Kian's own fork of archinstall ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall), vendored into the ISO at `/opt/kianinstall`, works offline). `sudo kianinstall` installs an Arch base; `sudo kian-install` runs the same fork and then applies the Kian OS branding (`kian-apply`). Choose "Exit" at the installer's post-install screen so the branding step runs; see *Installed system*. |
+| **Installer** | **kian-install** — Kian OS's own installer, no archinstall: asks only **mirror region** (regenerates the mirrorlist) and **timezone**, auto-detects the target disk, pacstraps the full desktop, sets up GRUB + the `kian` user, then applies the Kian branding. For full menu control the ISO also ships **kianinstall** — Kian's own archinstall fork ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall), vendored at `/opt/kianinstall`). |
 
 ## Boot menu (GRUB/syslinux)
 
@@ -108,24 +108,46 @@ steps; see [`docs/verification.md`](docs/verification.md). Quick manual pass:
    (log out to see the LightDM greeter).
 3. Use the taskbar/start menu, open **Kian Terminal** and try `pacman -Syu`,
    `gcc`, `python3`, `neofetch`, `sudo pacman -S tree`.
-4. `sudo kianinstall` installs an Arch base to a disk. This is **Kian's own
-   fork of archinstall** ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall),
-   pinned to a commit and vendored into the ISO at `/opt/kianinstall`, so the
-   installer works offline). The installer logic is unmodified upstream
-   archinstall code — GPL-3.0-only, all credit to the Arch Linux archinstall
-   contributors. `sudo kian-install` runs the same fork and adds automatic
-   Kian branding afterwards (see below). Set **Disk configuration** before
-   choosing Install.
-5. At the installer's post-install screen choose **Exit**, not **Reboot** —
-   `kian-install` then runs `kian-apply` to put the Kian identity, wallpaper,
-   applications and panel defaults onto the new system. Reboot from the live
-   shell afterwards.
+4. `sudo kian-install` installs Kian OS to a disk. This is **Kian OS's own
+   installer** — no archinstall involved. It asks exactly **two questions**:
+   which **mirror region** to download packages from (it regenerates
+   `/etc/pacman.d/mirrorlist` for that region from the official status API —
+   pick the one closest to you, it decides install speed) and the
+   **timezone**. Everything else is automatic: the target disk is detected
+   (empty unpartitioned disks first, then the largest disk that is not the
+   boot medium; there is a loud 10-second erase countdown before anything
+   happens — Ctrl+C aborts), the disk is partitioned (GPT + ESP on UEFI, MBR
+   on BIOS), the full Kian OS desktop is installed with `pacstrap`, GRUB is
+   set up, the `kian` user is created (password `kian`), and `kian-apply`
+   brands the new system. Reboot with the ISO detached.
+   For menu-driven full control (partitioning choices, encryption, etc.) the
+   ISO also carries **Kian's own archinstall fork**
+   ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall),
+   pinned commit, vendored at `/opt/kianinstall`): run `sudo kianinstall`.
+
+### Real persistence in the live session ("not like live")
+
+A plain live session throws everything away at shutdown — the overlay lives
+in RAM. Kian OS can make the live session **really save**:
+
+1. Attach a disk (a new VMware/QEMU virtual disk is perfect) and run
+   `sudo kian-persist` — it auto-picks an empty disk (or pass one:
+   `sudo kian-persist /dev/sdX`), warns loudly for 8 seconds, then creates an
+   ext4 partition labelled `KIANPERSIST`.
+2. Reboot and choose **"Kian OS 0.4.0 — persistent session"** in the boot
+   menu (present for both BIOS/syslinux and UEFI/GRUB; the plain entry stays
+   non-persistent so the ISO always boots everywhere).
+3. In that session every file you create in `/home/kian`, every `/etc`
+   change and every `pacman` install is written to the KIANPERSIST partition
+   (archiso's cow device) and comes back on every reboot — not RAM, not
+   tmpfs: disk. The default session also gets a 2 GiB overlay instead of
+   archiso's 256 MiB, so creating files works even without persistence.
 
 ### Installed system
 
-Archinstall installs stock Arch Linux from the official mirrors; the Kian
-overlay lives only on the live ISO. `kian-install` therefore runs
-`kian-apply` on the new root after archinstall finishes, which copies:
+The `kian-install` installer puts a real Arch Linux base on disk from the
+mirrors of the region you chose; the Kian overlay lives only on the live ISO.
+It therefore runs `kian-apply` on the new root right after `pacstrap`, which copies:
 
 - `/usr/lib/os-release` (Kian identity) plus the hook that keeps it through
   future `filesystem` upgrades,

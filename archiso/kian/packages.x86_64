@@ -85,6 +85,11 @@ qemu-guest-agent
 # ---- Real installer for installing Kian OS to a disk ----
 archinstall
 
+# ---- Kian OS own installer (kian-install) + persistence tool (kian-persist):
+#      partitioning and pacstrap/genfstab/arch-chroot. NOT optional.
+arch-install-scripts
+parted
+
 # ---- Filesystem tools needed for installation ----
 dosfstools
 e2fsprogs
