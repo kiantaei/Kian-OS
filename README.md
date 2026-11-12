@@ -138,12 +138,23 @@ lsblk -f
 sudo kian-apply              # detects the install and asks
 sudo kian-apply /dev/sda2    # or name the root partition
 sudo kian-apply /mnt         # or an already-mounted root
+sudo kian-apply --no-gui     # branding only, never install packages
 ```
+
+It understands both archinstall layouts: plain `ext4` and the default
+**"btrfs with subvolumes"** layout — the root lives in the `@` subvolume there,
+and `kian-apply` mounts that automatically (a plain mount of the btrfs top
+level shows no `/etc`, which older versions rejected as "not an Arch install").
+
+If the target has no desktop (archinstall *minimal* profile), `kian-apply`
+offers to install the full **Kian OS desktop** — Xfce, LightDM, Chromium and
+the Kian app set, the same package list the live ISO ships — into the target
+with pacman, and enables `lightdm` + `NetworkManager`, so the installed system
+really is Kian OS with a GUI, not plain Arch. Pass `--no-gui` to skip that.
 
 The result is Kian OS **on an Arch base**: Arch packages and updates still come
 from the official repositories, while identity, branding and Kian's own files
-come from the ISO. It cannot add a desktop that archinstall did not install;
-it warns when XFCE or Chromium (needed by `xenox`) is missing.
+come from the ISO.
 
 ### Installer troubleshooting
 

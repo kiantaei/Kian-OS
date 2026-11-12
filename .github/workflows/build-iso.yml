@@ -46,7 +46,10 @@ jobs:
           bash -n build.sh
           bash -n scripts/ci-boot-test.sh
           bash -n archiso/kian/airootfs/usr/local/bin/kian-setup
+          bash -n archiso/kian/airootfs/usr/local/bin/kian-install
+          bash -n archiso/kian/airootfs/usr/local/bin/kian-apply
           bash -n archiso/kian/airootfs/usr/local/bin/kian-panel-position-fix
+          bash -n archiso/kian/airootfs/usr/local/bin/kian-trust-desktop
           bash -n archiso/kian/airootfs/usr/bin/xenox
           bash -n archiso/kian/airootfs/usr/local/share/kian-ci/verify-commands.sh
           echo "profile sanity checks passed"
