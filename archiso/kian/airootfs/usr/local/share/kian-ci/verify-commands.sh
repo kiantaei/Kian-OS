@@ -156,10 +156,29 @@ KPH="$(kian-persist --help 2>/dev/null | head -8)"
 echo "$KPH" | grep -q "persistence" \
     && ok "kian-persist: --help prints (real live persistence)" || bad "kian-persist: --help output unexpected"
 PERSIST_SHIPPED=0
-for cfg in /run/archiso/bootmnt/*/boot/syslinux/syslinux.cfg /run/archiso/bootmnt/*/boot/grub/grub.cfg; do
-    [ -f "$cfg" ] || continue
-    grep -q "cow_label=KIANPERSIST" "$cfg" && PERSIST_SHIPPED=1
+# The boot config lives on the ISO filesystem. /run/archiso/bootmnt is only
+# still mounted when copytoram did NOT kick in (it copies the airootfs to RAM
+# on machines with plenty of memory and unmounts the medium) — so prefer the
+# ISO device directly, via the archisolabel from the running cmdline.
+ISO_LABEL=""
+for o in $(cat /proc/cmdline 2>/dev/null); do
+    case "$o" in archisolabel=*) ISO_LABEL="${o#archisolabel=}" ;; esac
 done
+ISO_CHECK_DIR="$(mktemp -d /tmp/kian-iso-check.XXXXXX)"
+ISO_SRC="/dev/disk/by-label/${ISO_LABEL:-KIAN_OS_040}"
+if sudo -n mount -o ro "$ISO_SRC" "$ISO_CHECK_DIR" 2>/dev/null; then
+    for cfg in "$ISO_CHECK_DIR"/*/boot/syslinux/syslinux.cfg "$ISO_CHECK_DIR"/*/boot/grub/grub.cfg; do
+        [ -f "$cfg" ] || continue
+        grep -q "cow_label=KIANPERSIST" "$cfg" && PERSIST_SHIPPED=1
+    done
+    sudo -n umount "$ISO_CHECK_DIR" 2>/dev/null || true
+elif [ -d /run/archiso/bootmnt ]; then
+    for cfg in /run/archiso/bootmnt/*/boot/syslinux/syslinux.cfg /run/archiso/bootmnt/*/boot/grub/grub.cfg; do
+        [ -f "$cfg" ] || continue
+        grep -q "cow_label=KIANPERSIST" "$cfg" && PERSIST_SHIPPED=1
+    done
+fi
+rmdir "$ISO_CHECK_DIR" 2>/dev/null || true
 [ "$PERSIST_SHIPPED" = "1" ] && ok "persist: persistent boot entry shipped (cow_label=KIANPERSIST)" || bad "persist: persistent boot entry missing in boot config"
 if grep -q "cow_spacesize=2G" /proc/cmdline 2>/dev/null; then
     ok "persist: live overlay space is 2G (default session can create files)"
