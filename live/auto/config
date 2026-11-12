@@ -22,7 +22,7 @@ lb config noauto \
     --binary-images iso-hybrid \
     --chroot-filesystem squashfs \
     --binary-filesystem ext4 \
-    --bootappend-live "boot=live components persistence persistence-label=KIANPERSIST overlay-size=4G username=kian user-fullname=Kian locales=en_US.UTF-8 timezone=Asia/Tehran keyboard-layouts=us console=ttyS0,115200n8 console=tty0" \
+    --bootappend-live "boot=live components persistence persistence-label=KIANPERSIST overlay-size=4G username=kian user-fullname=Kian hostname=kian-os locales=en_US.UTF-8 timezone=Asia/Tehran keyboard-layouts=us console=ttyS0,115200n8 console=tty0" \
     --bootappend-install "console=ttyS0,115200n8 console=tty0" \
     --iso-volume "KIAN_OS_100" \
     --iso-publisher "Kian OS <https://github.com/kiantaei/Kian-OS>" \
