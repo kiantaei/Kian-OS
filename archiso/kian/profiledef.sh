@@ -27,6 +27,8 @@ file_permissions=(
   ["/usr/local/bin/kian-setup"]="0:0:755"
   ["/usr/local/bin/kian-panel-position-fix"]="0:0:755"
   ["/usr/local/bin/kian-trust-desktop"]="0:0:755"
+  ["/usr/local/bin/kian-install"]="0:0:755"
+  ["/usr/local/bin/kian-apply"]="0:0:755"
   # Desktop launchers ship executable so xfdesktop never has to ask whether
   # they may run (the per-user GVFS trusted flag is added in-session by
   # /usr/local/bin/kian-trust-desktop).

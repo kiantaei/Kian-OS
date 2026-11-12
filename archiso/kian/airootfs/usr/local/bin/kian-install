@@ -1,0 +1,97 @@
+#!/bin/bash
+# Kian OS — installer launcher for archinstall.
+#
+# WHY THIS WRAPPER EXISTS
+#   The live image carries whatever archinstall version was current when the
+#   ISO was built. The Textual-based installer (4.x) can crash with
+#       ScreenStackError: Can't pop screen; there must be at least one screen
+#       on the stack
+#   This is an archinstall menu bug, not a Kian OS bug: a key press reaches a
+#   menu screen that has already been dismissed (typically a double Enter, or
+#   a held Enter while the Install entry's preview is still running its
+#   configuration sync), so the second dismiss() finds only the default
+#   screen. Nothing has been written to disk at that point.
+#
+#   This launcher prevents it two ways:
+#     1. it refreshes archinstall to the current repository version — Arch's
+#        own advice for a misbehaving installer on a live ISO — and
+#     2. it tells you to press Enter once and let the preview settle, which
+#        is what actually avoids the race.
+#
+# Usage:
+#   sudo kian-install              # guided install (recommended)
+#   sudo kian-install --config …   # scripted install, arguments are passed on
+
+set -uo pipefail
+
+say() { printf '\033[1;34m[kian-install]\033[0m %s\n' "$*"; }
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "kian-install must run as root:  sudo kian-install" >&2
+    exit 1
+fi
+
+ARCHINSTALL=/usr/bin/archinstall
+if [ ! -x "$ARCHINSTALL" ]; then
+    echo "archinstall is not installed on this image" >&2
+    exit 1
+fi
+
+# --- refresh the installer (needs internet; harmless when offline) -----------
+say "refreshing archinstall to the current repository version ..."
+if pacman -Sy --noconfirm archinstall archlinux-keyring >/tmp/kian-install-update.log 2>&1; then
+    say "using archinstall $(archinstall --version 2>/dev/null | head -1)"
+else
+    say "could not refresh archinstall (offline?) — using the bundled version"
+    say "details: /tmp/kian-install-update.log"
+fi
+
+if [ "$#" -eq 0 ]; then
+    cat <<'EOF'
+
+Configure these in the menu before you pick "Install":
+  1. Disk configuration  (partitioning + filesystem)
+  2. Profile             (desktop / minimal)
+  3. Authentication      (root password + a user)
+
+If you ever see "ScreenStackError: Can't pop screen", that is an archinstall
+menu bug: a key press reached a screen that had already been closed. Nothing
+has touched your disk at that point. Press Enter once and wait for the preview
+to finish before choosing anything, or restart with `sudo kian-install`.
+
+When the installation finishes, choose "Exit" at the post-install screen
+(not "Reboot"): Kian OS branding is applied right after archinstall exits,
+and rebooting from that menu skips it. If you reboot by mistake, boot the ISO
+again and run `sudo kian-apply` — no data is lost either way.
+
+EOF
+fi
+
+# archinstall stays in the foreground; we regain control when it exits.
+"$ARCHINSTALL" "$@"
+status=$?
+
+if [ "$status" -ne 0 ]; then
+    say "archinstall exited with status $status — no branding was applied"
+    exit "$status"
+fi
+
+# --- turn the fresh Arch install into Kian OS --------------------------------
+# archinstall installs stock Arch Linux; kian-apply copies the Kian overlay
+# (identity, wallpaper, xenox, launchers, panel defaults) onto that root.
+if [ ! -x /usr/local/bin/kian-apply ]; then
+    say "kian-apply is missing from this image — skipping branding"
+    exit 0
+fi
+
+say "archinstall finished — applying Kian OS branding"
+if [ -f /mnt/etc/fstab ] && [ -x /mnt/usr/bin/pacman ]; then
+    /usr/local/bin/kian-apply -y /mnt
+else
+    # archinstall already unmounted the target: detect it again and ask.
+    /usr/local/bin/kian-apply
+fi
+status=$?
+if [ "$status" -ne 0 ]; then
+    say "branding was not applied. Boot the ISO and run: sudo kian-apply /dev/sdXN"
+fi

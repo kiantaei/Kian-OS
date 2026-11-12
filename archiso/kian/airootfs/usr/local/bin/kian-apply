@@ -1,0 +1,281 @@
+#!/bin/bash
+# Kian OS — apply Kian branding to an installed Arch system.
+#
+# WHY THIS EXISTS
+#   archinstall installs stock Arch Linux from the official mirrors. It never
+#   copies the Kian OS overlay that lives inside the live ISO (os-release,
+#   wallpaper, xenox, Kian app launchers, panel/desktop defaults), so an
+#   archinstall installation boots as plain Arch. This script copies that
+#   overlay onto an installed root, making the installed system Kian OS on an
+#   Arch base.
+#
+# USAGE
+#   sudo kian-apply                 # detect the installed Arch root and ask
+#   sudo kian-apply /dev/sda2       # apply to that partition
+#   sudo kian-apply /mnt            # apply to an already-mounted root
+#   sudo kian-apply -y /dev/sda2    # no confirmation prompt
+#
+#   Run it from the live ISO (the branding files only exist there). It is
+#   idempotent: running it twice copies the same files again.
+
+set -uo pipefail
+
+LIVE="${KIAN_LIVE_ROOT:-/}"   # root of the live medium (overridable for tests)
+TARGET_ARG=""
+ASSUME_YES=0
+AUTO=0
+T=""                          # target root once mounted
+MP=""                         # mountpoint we created
+MOUNTED_BY_US=0
+
+say()  { printf '\033[1;34m[kian-apply]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[kian-apply]\033[0m %s\n' "$*" >&2; }
+die()  { printf 'kian-apply: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    sed -n '3,25p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+# cp + chmod in one step; avoids depending on `install`, which is not present
+# in every environment this script is tested in (e.g. a Git Bash sandbox).
+put() {
+    local src="$1" dest="$2" mode="$3"
+    mkdir -p "$(dirname "$dest")" || return 1
+    cp -f "$src" "$dest" || return 1
+    chmod "$mode" "$dest" 2>/dev/null || true
+}
+
+is_arch_root() {
+    local dir="$1"
+    [ -f "$dir/usr/bin/pacman" ] || return 1
+    [ -f "$dir/etc/fstab" ] || return 1
+    grep -qE '^(ID=arch|ID=kian)$' "$dir/usr/lib/os-release" 2>/dev/null || return 1
+}
+
+mount_root() {   # $1 = device
+    local dev="$1"
+    [ -n "$MP" ] || MP="$(mktemp -d /run/kian-apply.XXXXXX 2>/dev/null || mktemp -d)"
+    if mount "$dev" "$MP" 2>/dev/null; then
+        MOUNTED_BY_US=1
+        return 0
+    fi
+    # btrfs layouts installed with an @ subvolume (archinstall's default
+    # "btrfs with subvolumes" choice) cannot be used through the top level.
+    if mount -t btrfs -o subvol=@ "$dev" "$MP" 2>/dev/null; then
+        MOUNTED_BY_US=1
+        return 0
+    fi
+    return 1
+}
+
+unmount_root() {
+    [ "$MOUNTED_BY_US" -eq 1 ] || return 0
+    sync
+    umount "$MP" 2>/dev/null || warn "could not unmount $MP"
+    rmdir "$MP" 2>/dev/null || true
+    MOUNTED_BY_US=0
+}
+trap unmount_root EXIT
+
+# --- candidate detection ----------------------------------------------------
+# Prints one line per filesystem that looks like an Arch install:
+#   <device>\t<mount option>
+detect_candidates() {
+    command -v lsblk >/dev/null || return 0
+    lsblk -rno PATH,FSTYPE 2>/dev/null | while read -r dev fstype; do
+        case "$fstype" in
+            ext2|ext3|ext4|btrfs|xfs|f2fs) ;;
+            crypto_LUKS)
+                warn "$dev is encrypted (LUKS) — unlock it first, then mount it and run: sudo kian-apply /mnt"
+                continue
+                ;;
+            *) continue ;;
+        esac
+        if command -v findmnt >/dev/null && findmnt -n --source "$dev" >/dev/null 2>&1; then
+            continue
+        fi
+        local probe
+        probe="$(mktemp -d /run/kian-probe.XXXXXX 2>/dev/null || mktemp -d)"
+        if mount -o ro "$dev" "$probe" 2>/dev/null; then
+            if is_arch_root "$probe"; then
+                printf '%s\t\n' "$dev"
+            elif [ -f "$probe/@/usr/bin/pacman" ] && [ -f "$probe/@/etc/fstab" ]; then
+                printf '%s\t-o subvol=@\n' "$dev"
+            fi
+            umount "$probe" 2>/dev/null
+        fi
+        rmdir "$probe" 2>/dev/null || true
+    done
+}
+
+# --- the actual branding copy ----------------------------------------------
+apply_branding() {
+    local t="$1"
+    is_arch_root "$t" || die "$t does not look like an Arch/Kian install (needs /etc/fstab, /usr/bin/pacman and a matching /usr/lib/os-release)"
+
+    [ -f "$LIVE/usr/share/kian/os-release" ] || die "branding source not found at $LIVE/usr/share/kian — run this from the Kian OS live ISO"
+
+    say "installing Kian OS identity into $t"
+    put "$LIVE/usr/share/kian/os-release" "$t/usr/lib/os-release" 0644
+    # /etc/os-release is normally a symlink to ../usr/lib/os-release; if the
+    # install replaced it with a real file, overwrite that too.
+    if [ -f "$t/etc/os-release" ] && [ ! -L "$t/etc/os-release" ]; then
+        put "$LIVE/usr/share/kian/os-release" "$t/etc/os-release" 0644
+    fi
+    put "$LIVE/etc/motd" "$t/etc/motd" 0644
+
+    mkdir -p "$t/usr/share/kian" "$t/usr/share/backgrounds/kian"
+    cp -a "$LIVE/usr/share/kian/." "$t/usr/share/kian/" || warn "copying /usr/share/kian failed"
+    cp -a "$LIVE/usr/share/backgrounds/kian/." "$t/usr/share/backgrounds/kian/" || warn "copying the wallpaper failed"
+
+    say "installing Kian applications and desktop entries"
+    mkdir -p "$t/usr/share/applications"
+    cp -a "$LIVE"/usr/share/applications/kian-*.desktop "$t/usr/share/applications/" 2>/dev/null || true
+    put "$LIVE/usr/bin/xenox" "$t/usr/bin/xenox" 0755
+    put "$LIVE/usr/bin/neofetch" "$t/usr/bin/neofetch" 0755
+    put "$LIVE/usr/local/bin/kian-panel-position-fix" "$t/usr/local/bin/kian-panel-position-fix" 0755
+    put "$LIVE/usr/local/bin/kian-trust-desktop" "$t/usr/local/bin/kian-trust-desktop" 0755
+    mkdir -p "$t/etc/xdg/autostart"
+    cp -a "$LIVE"/etc/xdg/autostart/kian-*.desktop "$t/etc/xdg/autostart/" 2>/dev/null || true
+
+    say "installing Kian defaults (skel, graphics, identity hook)"
+    mkdir -p "$t/etc/skel"
+    cp -a "$LIVE/etc/skel/." "$t/etc/skel/" || warn "copying /etc/skel failed"
+    put "$LIVE/etc/X11/xorg.conf.d/20-kian-graphics.conf" "$t/etc/X11/xorg.conf.d/20-kian-graphics.conf" 0644
+    # Greeter branding only: the live ISO's lightdm.conf auto-logs-in as `kian`,
+    # which an installed system must not do, so it is deliberately not copied.
+    if [ -d "$t/etc/lightdm" ] && [ -f "$LIVE/etc/lightdm/lightdm-gtk-greeter.conf" ]; then
+        put "$LIVE/etc/lightdm/lightdm-gtk-greeter.conf" "$t/etc/lightdm/lightdm-gtk-greeter.conf" 0644
+    fi
+    # Keep the Kian identity across future `filesystem` upgrades in the target.
+    put "$LIVE/etc/pacman.d/hooks/kian-os-release.hook" "$t/etc/pacman.d/hooks/kian-os-release.hook" 0644
+
+    # Existing users: add whatever Kian defaults they are missing (never
+    # overwrite their own files) and make the launchers executable.
+    local home user uid gid f
+    for home in "$t"/home/*; do
+        [ -d "$home" ] || continue
+        user="$(basename "$home")"
+        uid="$(awk -F: -v u="$user" '$1==u{print $3}' "$t/etc/passwd" 2>/dev/null)"
+        gid="$(awk -F: -v u="$user" '$1==u{print $4}' "$t/etc/passwd" 2>/dev/null)"
+        [ -n "${uid:-}" ] || continue
+        cp -a -n "$t/etc/skel/." "$home/" 2>/dev/null || true
+        chmod 755 "$home"/Desktop/*.desktop 2>/dev/null || true
+        chown -R "$uid:$gid" "$home" 2>/dev/null || warn "could not chown $home to $user"
+        say "seeded Kian defaults for user $user"
+    done
+
+    # Boot menu branding (GRUB shows GRUB_DISTRIBUTOR).
+    if [ -f "$t/etc/default/grub" ] && grep -q '^GRUB_DISTRIBUTOR=' "$t/etc/default/grub"; then
+        sed -i 's|^GRUB_DISTRIBUTOR=.*|GRUB_DISTRIBUTOR="Kian OS"|' "$t/etc/default/grub"
+        if [ -f "$t/boot/grub/grub.cfg" ] && [ -x "$t/usr/bin/grub-mkconfig" ] && command -v arch-chroot >/dev/null; then
+            say "regenerating the GRUB menu"
+            if arch-chroot "$t" grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1; then
+                say "GRUB menu updated"
+            else
+                warn "could not regenerate GRUB; run this in the installed system: sudo grub-mkconfig -o /boot/grub/grub.cfg"
+            fi
+        fi
+    fi
+
+    # Things we cannot fix by copying files.
+    if [ ! -x "$t/usr/bin/xfce4-session" ]; then
+        warn "no XFCE desktop found in the target — Kian files are installed, but there is nothing to show them."
+        warn "install one with: sudo pacman -S xorg-server lightdm lightdm-gtk-greeter xfce4"
+    fi
+    if [ ! -x "$t/usr/bin/chromium" ]; then
+        warn "chromium is missing — xenox (Kian's browser) needs it: sudo pacman -S chromium"
+    fi
+
+    # XFCE stores the wallpaper per user; the skel config points at the Kian
+    # wallpaper, but a user created by archinstall already has an xfconf file.
+    if [ -d "$t/home" ]; then
+        for home in "$t"/home/*; do
+            f="$home/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml"
+            [ -f "$f" ] || continue
+            if grep -q 'last-image' "$f"; then
+                # Only the image properties: image-style is an int in the same
+                # file and must not be replaced with a path.
+                sed -i '/last-image/ s|value="[^"]*"|value="/usr/share/backgrounds/kian/kian-wallpaper.jpg"|' "$f"
+                user="$(basename "$home")"
+                uid="$(awk -F: -v u="$user" '$1==u{print $3}' "$t/etc/passwd" 2>/dev/null)"
+                gid="$(awk -F: -v u="$user" '$1==u{print $4}' "$t/etc/passwd" 2>/dev/null)"
+                [ -n "${uid:-}" ] && chown "$uid:$gid" "$f" 2>/dev/null || true
+            fi
+        done
+    fi
+
+    say "done — Kian OS branding applied to $t"
+}
+
+# --- main -------------------------------------------------------------------
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+        -y|--yes)  ASSUME_YES=1 ;;
+        --auto)    AUTO=1 ;;
+        -*)        die "unknown option: $1" ;;
+        *)         TARGET_ARG="$1" ;;
+    esac
+    shift
+done
+
+if [ "$(id -u)" -ne 0 ]; then
+    die "must run as root:  sudo kian-apply${TARGET_ARG:+ $TARGET_ARG}"
+fi
+
+if [ -n "$TARGET_ARG" ]; then
+    if [ -d "$TARGET_ARG" ]; then
+        T="$TARGET_ARG"          # already mounted by the caller
+    elif [ -b "$TARGET_ARG" ]; then
+        mount_root "$TARGET_ARG" || die "could not mount $TARGET_ARG"
+        T="$MP"
+    else
+        die "$TARGET_ARG is neither a directory nor a block device"
+    fi
+else
+    say "looking for an installed Arch/Kian system ..."
+    candidates="$(detect_candidates)"
+    count="$(printf '%s\n' "$candidates" | grep -c . || true)"
+    if [ "$count" -eq 0 ]; then
+        cat <<'EOF'
+No installed Arch system was found.
+  - If the install is on LUKS, unlock it and mount the root, then:
+        sudo kian-apply /mnt
+  - Otherwise pass the root partition explicitly:
+        lsblk -f
+        sudo kian-apply /dev/sdXN
+EOF
+        exit 1
+    fi
+    if [ "$count" -gt 1 ]; then
+        warn "several Arch installations found:"
+        printf '%s\n' "$candidates" | sed 's/^/  /'
+        die "pass the one you want: sudo kian-apply /dev/sdXN"
+    fi
+    dev="$(printf '%s\n' "$candidates" | cut -f1)"
+    opts="$(printf '%s\n' "$candidates" | cut -f2)"
+    if [ "$ASSUME_YES" -ne 1 ]; then
+        printf 'Apply Kian OS branding to %s? [y/N] ' "$dev"
+        read -r reply
+        case "$reply" in
+            y|Y|yes|YES) ;;
+            *) echo "aborted"; exit 1 ;;
+        esac
+    fi
+    if [ "${opts:-}" = "-o subvol=@" ]; then
+        MP="$(mktemp -d /run/kian-apply.XXXXXX 2>/dev/null || mktemp -d)"
+        mount -t btrfs -o subvol=@ "$dev" "$MP" || die "could not mount $dev (subvol=@)"
+        MOUNTED_BY_US=1
+        T="$MP"
+    else
+        mount_root "$dev" || die "could not mount $dev"
+        T="$MP"
+    fi
+fi
+
+apply_branding "$T"
+
+if [ "$MOUNTED_BY_US" -eq 1 ]; then
+    say "unmounting $T"
+fi

@@ -41,7 +41,7 @@ Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox).
 | **Apps** | Proper `.desktop` registration: Xenox Browser, Kian Terminal, File Manager (Thunar), Notepad (Mousepad), Calculator (galculator), Settings, Task Manager. |
 | **Users** | Real accounts: `kian` (uid 1000, wheel/sudo) created by `kian-setup.service`; root locked; desktop never runs as root. |
 | **Filesystem** | Real hierarchy: `/`, `/home/kian` with `Desktop/ Documents/ Downloads/ Music/ Pictures/ Videos/`. |
-| **Installer** | Real **archinstall** is included — boot the ISO, run `sudo archinstall` to install Kian OS to disk. |
+| **Installer** | Real **archinstall** is included — boot the ISO, run `sudo kian-install` to install an Arch base and then apply the Kian OS branding to it (`kian-apply`). Choose "Exit" at archinstall's post-install screen so the branding step runs; see *Installed system*. |
 
 ## Boot menu (GRUB/syslinux)
 
@@ -108,9 +108,62 @@ steps; see [`docs/verification.md`](docs/verification.md). Quick manual pass:
    (log out to see the LightDM greeter).
 3. Use the taskbar/start menu, open **Kian Terminal** and try `pacman -Syu`,
    `gcc`, `python3`, `neofetch`, `sudo pacman -S tree`.
-4. `sudo archinstall` installs Kian OS to a disk (choose the default
+4. `sudo kian-install` installs an Arch base to a disk (choose the default
    "xorg-server + lightdm + xfce4" style profile packages or let archinstall
-   pick its defaults).
+   pick its defaults). Set **Disk configuration** before choosing Install.
+5. At archinstall's post-install screen choose **Exit**, not **Reboot** —
+   `kian-install` then runs `kian-apply` to put the Kian identity, wallpaper,
+   applications and panel defaults onto the new system. Reboot from the live
+   shell afterwards.
+
+### Installed system
+
+Archinstall installs stock Arch Linux from the official mirrors; the Kian
+overlay lives only on the live ISO. `kian-install` therefore runs
+`kian-apply` on the new root after archinstall finishes, which copies:
+
+- `/usr/lib/os-release` (Kian identity) plus the hook that keeps it through
+  future `filesystem` upgrades,
+- `/usr/share/kian` and `/usr/share/backgrounds/kian` (start page, wallpaper),
+- `xenox`, the `neofetch` wrapper, Kian `.desktop` entries and the panel/trust
+  helpers, with the XFCE autostart entries,
+- `/etc/skel` defaults, seeded into existing users without overwriting their
+  files, plus the Kian wallpaper in each user's XFCE desktop channel,
+- `GRUB_DISTRIBUTOR="Kian OS"` and a regenerated GRUB menu.
+
+You can also run it at any time from the live ISO:
+
+```bash
+lsblk -f
+sudo kian-apply              # detects the install and asks
+sudo kian-apply /dev/sda2    # or name the root partition
+sudo kian-apply /mnt         # or an already-mounted root
+```
+
+The result is Kian OS **on an Arch base**: Arch packages and updates still come
+from the official repositories, while identity, branding and Kian's own files
+come from the ISO. It cannot add a desktop that archinstall did not install;
+it warns when XFCE or Chromium (needed by `xenox`) is missing.
+
+### Installer troubleshooting
+
+The Textual-based archinstall (4.x) can crash with
+`ScreenStackError: Can't pop screen; there must be at least one screen on the
+stack`. This is an archinstall menu bug: a key press is delivered to a menu
+screen that has already been dismissed — typically a double Enter, or a held
+Enter while the Install entry's preview is still running its configuration
+sync — so the second `dismiss()` finds only the default screen. It happens
+before anything is written to disk.
+
+What to do:
+
+- run `sudo kian-install`, which refreshes archinstall to the current
+  repository version before starting it (Arch's remedy for a misbehaving
+  installer on a live ISO),
+- press Enter **once** per menu and let the preview pane settle before the next
+  key, and
+- if it still crashes, re-run `sudo kian-install`; the live session and the
+  target disk are untouched.
 
 ## Repository layout
 

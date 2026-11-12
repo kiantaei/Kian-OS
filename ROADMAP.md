@@ -41,7 +41,8 @@ Version **0.4.0 "Horizon" (Linux edition)** — first Linux-based release.
 
 ## Milestone L4 — Installation story
 - [DONE]   archinstall included for real disk installation
-- [PLANNED] Kian-flavored archinstall preset (kian user, Kian branding, Asia/Tehran)
+- [DONE]   `kian-apply`: Kian identity, wallpaper, apps and panel defaults on an Arch base
+- [PLANNED] Kian-flavored archinstall preset (kian user, Asia/Tehran) and a first-boot wizard
 - [PLANNED] First-boot wizard to change the default `kian/kian` password
 - [PLANNED] Persistence option for the live medium
 
