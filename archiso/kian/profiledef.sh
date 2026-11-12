@@ -25,6 +25,14 @@ kernel_params_x86_64="console=ttyS0,115200n8 console=tty0"
 file_permissions=(
   ["/etc/sudoers.d/kian-wheel"]="0:0:440"
   ["/usr/local/bin/kian-setup"]="0:0:755"
+  ["/usr/local/bin/kian-panel-position-fix"]="0:0:755"
+  ["/usr/local/bin/kian-trust-desktop"]="0:0:755"
+  # Desktop launchers ship executable so xfdesktop never has to ask whether
+  # they may run (the per-user GVFS trusted flag is added in-session by
+  # /usr/local/bin/kian-trust-desktop).
+  ["/etc/skel/Desktop/kian-files.desktop"]="0:0:755"
+  ["/etc/skel/Desktop/kian-terminal.desktop"]="0:0:755"
+  ["/etc/skel/Desktop/kian-xenox.desktop"]="0:0:755"
   ["/usr/bin/xenox"]="0:0:755"
   ["/usr/bin/neofetch"]="0:0:755"
 )

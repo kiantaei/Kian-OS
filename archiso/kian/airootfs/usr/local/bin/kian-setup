@@ -39,4 +39,11 @@ for d in Desktop Documents Downloads Music Pictures Videos; do
     fi
 done
 
+# Desktop launchers must be executable, otherwise xfdesktop/Thunar refuse to
+# run them and show "Untrusted application launcher" on first click. The
+# checksum that XFCE >= 4.18 also requires is per-user GVFS metadata and is
+# applied inside the session by /usr/local/bin/kian-trust-desktop (autostart).
+chmod 755 "${HOME_DIR}"/Desktop/*.desktop 2>/dev/null || true
+chown kian:kian "${HOME_DIR}"/Desktop/*.desktop 2>/dev/null || true
+
 exit 0

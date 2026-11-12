@@ -1,0 +1,57 @@
+#!/bin/bash
+# Kian OS — make the shipped desktop launchers trusted.
+#
+# WHY: xfdesktop/Thunar refuse to run a .desktop file sitting in ~/Desktop
+# until it is BOTH executable AND trusted. Without that, every icon on the
+# Kian desktop shows
+#   "Untrusted application launcher - ...in an insecure location..."
+# on first click, which makes the live desktop feel broken.
+#
+# IMPORTANT (XFCE >= 4.18, Arch ships 4.20): trust is *checksum-based*. A
+# plain `chmod +x`, and even the old `metadata::trusted` flag, are not enough:
+# XFCE stores the SHA-256 of the launcher in the GVFS key
+# `metadata::xfce-exe-checksum` and treats the file as trusted only while
+# that checksum still matches the file's contents.
+#
+# kian-setup already sets the executable bit when it seeds the home
+# directory. The checksum lives in per-user GVFS metadata, so it can only be
+# written inside a running session — hence this autostart helper.
+
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+
+trust_file() {
+    local f="$1" sum
+    [ -f "$f" ] || return 0
+    chmod +x "$f" 2>/dev/null || true
+    sum=$(sha256sum "$f" 2>/dev/null | awk '{print $1}')
+    [ -n "$sum" ] || return 1
+    # The key that actually removes the prompt on XFCE >= 4.18.
+    gio set -t string "$f" metadata::xfce-exe-checksum "$sum" 2>/dev/null
+    # Old (pre-4.18) / MATE-style flag — harmless fallback.
+    gio set "$f" metadata::trusted true 2>/dev/null || true
+}
+
+trusted_ok() {
+    local f="$1" want
+    want=$(sha256sum "$f" 2>/dev/null | awk '{print $1}')
+    [ -n "$want" ] || return 1
+    gio info -a metadata::xfce-exe-checksum "$f" 2>/dev/null | grep -q "$want"
+}
+
+shopt -s nullglob
+# gvfsd-metadata comes up with the session; give it a few chances.
+for attempt in 1 2 3 4 5; do
+    pending=0
+    for f in "$HOME"/Desktop/*.desktop; do
+        trust_file "$f"
+        trusted_ok "$f" || pending=1
+    done
+    [ "$pending" -eq 0 ] && break
+    sleep 2
+done
+
+# Refresh the icons so the new trust state is picked up immediately.
+xfdesktop --reload >/dev/null 2>&1 || true
+
+touch /tmp/kian-trust-desktop-ran
+exit 0
