@@ -10,6 +10,10 @@ live-config
 live-config-systemd
 sudo
 
+# ---- firmware (explicit: live-build 3.0~a57-1ubuntu49's own firmware
+# pass is broken on noble — it feeds garbage tokens to apt) ----
+linux-firmware
+
 # ---- networking ----
 network-manager
 network-manager-gnome
@@ -51,6 +55,8 @@ fonts-noto-core
 falkon
 
 # ---- desktop plumbing / welcome GUI / automirror ----
+linux-firmware
+
 xdg-user-dirs
 xdg-utils
 policykit-1

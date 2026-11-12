@@ -32,8 +32,8 @@ lb config noauto \
     --source false \
     --apt-recommends false \
     --apt-indices false \
-    --firmware-binary true \
-    --firmware-chroot true \
+    --firmware-binary false \
+    --firmware-chroot false \
     --security true \
     --mirror-bootstrap "http://archive.ubuntu.com/ubuntu" \
     --mirror-chroot "http://archive.ubuntu.com/ubuntu" \
