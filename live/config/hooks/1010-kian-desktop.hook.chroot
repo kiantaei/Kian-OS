@@ -46,6 +46,21 @@ if command -v pacman >/dev/null 2>&1; then
     exit 1
 fi
 
+# live-build in ubuntu mode unconditionally extracts
+# /usr/share/gfxboot-theme-ubuntu/bootlogo.tar.gz during lb_binary_syslinux,
+# but that package no longer exists in noble. Provide a minimal valid stub:
+# an empty cpio 'bootlogo' in a tar.gz, which makes the extraction succeed
+# and adds nothing to the boot menu (the live-build theme renders its own
+# splash.png from splash.svg via rsvg).
+GFXDIR=/usr/share/gfxboot-theme-ubuntu
+if [ ! -e "$GFXDIR/bootlogo.tar.gz" ]; then
+    mkdir -p "$GFXDIR"
+    TMPCPIO="$(mktemp -d)"
+    ( cd "$TMPCPIO" && find . -mindepth 0 -maxdepth 0 | cpio -o --format=newc > bootlogo ) >/dev/null 2>&1
+    tar czf "$GFXDIR/bootlogo.tar.gz" -C "$TMPCPIO" bootlogo
+    rm -rf "$TMPCPIO"
+fi
+
 # Apt hygiene for the live image (live-build cleans the cache too, but be
 # certain — the ISO must stay lean).
 apt-get clean >/dev/null 2>&1 || true

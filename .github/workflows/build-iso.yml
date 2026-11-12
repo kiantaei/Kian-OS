@@ -37,7 +37,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y live-build debootstrap squashfs-tools xorriso \
-            grub-pc-bin grub-efi-amd64-bin syslinux-common isolinux syslinux mtools \
+            grub-pc-bin grub-efi-amd64-bin syslinux-common isolinux syslinux mtools cpio \
             binutils qemu-system-x86 expect socat netpbm git python3-yaml
 
       - name: Profile sanity checks
