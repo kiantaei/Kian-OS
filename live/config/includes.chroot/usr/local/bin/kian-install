@@ -1,0 +1,377 @@
+#!/bin/bash
+# Kian OS — the Kian OS installer (Ubuntu base).
+#
+# Asks exactly TWO questions — which mirror region ("repo regen") and the
+# timezone — then does everything else automatically, like a normal
+# installer: picks the target disk, partitions and formats it, copies the
+# complete Kian OS root from the live medium (rsync-copy, the same offline
+# approach as Ubuntu's Ubiquity/casper install), writes /etc/fstab,
+# regenerates the machine-id and initramfs, installs GRUB, sets the locale
+# and the mirror you chose, and cleans the live-only bits from the target.
+#
+# USAGE
+#   sudo kian-install                 # 2-question guided install
+#   sudo kian-install --disk /dev/sdX # force the target disk
+#   sudo kian-install --help
+#
+# The target disk is chosen automatically: empty unpartitioned disks first
+# (the typical new VMware disk), then the largest disk that is NOT the boot
+# medium. A loud 10-second erase countdown runs before anything happens —
+# Ctrl+C aborts, Enter continues. No hidden questions.
+#
+# The graphical installer is also on the ISO: Calamares (Welcome window ->
+# "Install Kian OS (graphical installer)"). It shares this same offline
+# copy-install mechanism.
+
+set -uo pipefail
+
+MOUNT=/mnt
+LOG=/tmp/kian-install.log
+SRC_EXCLUDES=(
+    --exclude=/etc/machine-id
+    --exclude=/var/lib/dbus/machine-id
+)
+
+say()  { printf '\033[1;34m[kian-install]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[kian-install]\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31m[kian-install] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+        --disk) DISK_ARG_PENDING=1 ;;
+        --disk=*) DISK_ARG="${arg#--disk=}" ;;
+        *) if [ "${DISK_ARG_PENDING:-0}" = "1" ]; then DISK_ARG="$arg"; DISK_ARG_PENDING=0; else die "unknown argument: $arg (try --help)"; fi ;;
+    esac
+done
+
+[ "$(id -u)" -eq 0 ] || die "must run as root:  sudo kian-install"
+[ -d /run/live/medium ] || die "run this from the Kian OS live session (boot the ISO)"
+command -v rsync >/dev/null || die "rsync missing from this ISO"
+command -v parted >/dev/null || die "parted missing from this ISO"
+
+# ---------------------------------------------------------------------------
+# Question 1 of 2 — mirror region ("repo regen").
+# Only hosts verified reachable on 2026-11-12 (HTTP 200 on noble Release);
+# cc.archive.ubuntu.com is Ubuntu's official per-country mirror scheme.
+# ---------------------------------------------------------------------------
+MIRRORS=(
+    "ir|Iran (ir.archive.ubuntu.com)"
+    "tr|Türkiye (tr.archive.ubuntu.com)"
+    "de|Germany (de.archive.ubuntu.com)"
+    "fr|France (fr.archive.ubuntu.com)"
+    "uk|United Kingdom (uk.archive.ubuntu.com)"
+    "jp|Japan (jp.archive.ubuntu.com)"
+    "us|Global default (archive.ubuntu.com)"
+)
+ask_region() {
+    echo
+    say "Question 1 of 2 — mirror region: where should apt download from?"
+    echo
+    local i=1 m
+    for m in "${MIRRORS[@]}"; do
+        printf '  %2d) %s\n' "$i" "${m#*|}"
+        i=$((i + 1))
+    done
+    printf '  %2d) auto-detect my country (geoip.ubuntu.com)\n' "$i"; AUTO_IDX=$i
+    printf '  %2d) keep the default archive.ubuntu.com\n' $((i + 1)); KEEP_IDX=$((i + 1))
+    local sel
+    while :; do
+        printf '\nSelect region [1-%d]: ' "$KEEP_IDX"
+        read -r sel || die "input ended (EOF) — aborting, nothing has been touched"
+        case "$sel" in
+            ''|*[!0-9]*) ;;
+            *) [ "$sel" -ge 1 ] && [ "$sel" -le "$KEEP_IDX" ] && break ;;
+        esac
+        echo "  please enter a number between 1 and $KEEP_IDX"
+    done
+    if [ "$sel" -eq "$AUTO_IDX" ]; then
+        CC="$(curl -fsSL --max-time 20 https://geoip.ubuntu.com/lookup 2>/dev/null \
+            | grep -oE '<CountryCode>[A-Za-z]{2}</CountryCode>' \
+            | grep -oE '[A-Za-z]{2}' | head -n1 || true)"
+        CC="$(printf '%s' "${CC:-}" | tr 'A-Z' 'a-z')"
+        if [ -n "$CC" ]; then
+            MIRROR_HOST="${CC}.archive.ubuntu.com"
+            say "geoip country: ${CC^^} -> ${MIRROR_HOST}"
+        else
+            MIRROR_HOST="archive.ubuntu.com"
+            warn "geoip failed — falling back to archive.ubuntu.com"
+        fi
+    elif [ "$sel" -eq "$KEEP_IDX" ]; then
+        MIRROR_HOST="archive.ubuntu.com"
+        say "keeping the global default mirror"
+    else
+        MIRROR_HOST="${MIRRORS[$((sel - 1))]%%|*}.archive.ubuntu.com"
+        say "region: ${MIRRORS[$((sel - 1))]#*|}"
+    fi
+    # Probe the chosen mirror honestly; a country without a working
+    # subdomain must never break apt on the installed system.
+    if [ "$MIRROR_HOST" != "archive.ubuntu.com" ]; then
+        if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 \
+                "http://${MIRROR_HOST}/ubuntu/dists/noble/Release")" != "200" ]; then
+            warn "${MIRROR_HOST} did not answer — falling back to archive.ubuntu.com"
+            MIRROR_HOST="archive.ubuntu.com"
+        fi
+    fi
+}
+
+write_target_sources() {
+    # deb822 sources — the same file+format Ubuntu's own automirror module
+    # writes on the installed system. Remove the generic sources.list so the
+    # chosen regional mirror is the only one used.
+    cat > "$MOUNT/etc/apt/sources.list.d/kian-ubuntu.sources" <<EOF
+Types: deb deb-src
+URIs: http://${MIRROR_HOST}/ubuntu/
+Suites: noble noble-updates noble-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb deb-src
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: noble-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+    rm -f "$MOUNT/etc/apt/sources.list"
+    say "installed system will use http://${MIRROR_HOST}/ubuntu/"
+}
+
+# ---------------------------------------------------------------------------
+# Question 2 of 2 — timezone
+# ---------------------------------------------------------------------------
+TZ_OPTIONS=(
+    "Asia/Tehran"
+    "Asia/Dubai"
+    "Asia/Istanbul"
+    "Europe/Berlin"
+    "Europe/London"
+    "Europe/Paris"
+    "Europe/Moscow"
+    "Asia/Kolkata"
+    "Asia/Shanghai"
+    "Asia/Tokyo"
+    "America/New_York"
+    "America/Los_Angeles"
+    "UTC"
+)
+ask_timezone() {
+    echo
+    say "Question 2 of 2 — timezone"
+    echo
+    local i=1 t
+    for t in "${TZ_OPTIONS[@]}"; do
+        printf '  %2d) %s\n' "$i" "$t"
+        i=$((i + 1))
+    done
+    printf '  %2d) other — type any IANA zone (e.g. Asia/Qatar)\n' "$i"
+    LAST_TZ_IDX=$i
+    local sel
+    while :; do
+        printf '\nSelect timezone [1-%d]: ' "$i"
+        read -r sel || die "input ended (EOF) — aborting, nothing has been touched"
+        if [ "$sel" = "$LAST_TZ_IDX" ]; then
+            printf 'Timezone (IANA name): '
+            read -r TIMEZONE || die "input ended (EOF) — aborting, nothing has been touched"
+            break
+        fi
+        case "$sel" in
+            ''|*[!0-9]*) ;;
+            *) [ "$sel" -ge 1 ] && [ "$sel" -le "$LAST_TZ_IDX" ] && { TIMEZONE="${TZ_OPTIONS[$((sel - 1))]}"; break; } ;;
+        esac
+        echo "  please enter a number between 1 and $LAST_TZ_IDX"
+    done
+    [ -f "/usr/share/zoneinfo/${TIMEZONE}" ] || die "unknown timezone '${TIMEZONE}' (see: ls /usr/share/zoneinfo/)"
+    say "timezone: ${TIMEZONE}"
+}
+
+# ---------------------------------------------------------------------------
+# Target disk (automatic, with an erase countdown — no question)
+# ---------------------------------------------------------------------------
+boot_medium_disk() {
+    local src parent
+    src="$(findmnt -no SOURCE /run/live/medium 2>/dev/null)" || return 0
+    case "$src" in
+        /dev/sr*|/dev/loop*) echo "" ;;
+        *)
+            parent="$(lsblk -srno PKNAME "$src" 2>/dev/null | head -n1)"
+            [ -n "$parent" ] && echo "/dev/$parent"
+            ;;
+    esac
+}
+
+disk_is_fresh() {
+    local disk="$1"
+    [ "$(lsblk -rno TYPE "${disk}" | grep -vc '^disk$')" -eq 0 ] || return 1
+    [ -z "$(wipefs -q "$disk" 2>/dev/null)" ] && return 0 || return 1
+}
+
+pick_target_disk() {
+    local bootdisk fresh="" fallback="" path size model sz_mb best=0
+    bootdisk="$(boot_medium_disk)"
+    while read -r path _type size model; do
+        [ "$path" = "$bootdisk" ] && continue
+        sz_mb="$(numfmt --from=iec "${size:-0}" 2>/dev/null || echo 0)"
+        [ "$sz_mb" -ge 10240 ] || continue
+        if disk_is_fresh "$path"; then
+            if [ "$sz_mb" -gt "$best" ]; then best="$sz_mb"; fresh="$path|$size|$model"; fi
+        elif [ -z "$fallback" ]; then
+            fallback="$path|$size|$model"
+        fi
+    done < <(lsblk -rno PATH,TYPE,SIZE,MODEL 2>/dev/null | awk '$2 == "disk" && $3 != "0"')
+    if [ -n "$fresh" ]; then echo "$fresh"; else echo "$fallback"; fi
+}
+
+# ---------------------------------------------------------------------------
+ask_region
+ask_timezone
+
+echo
+say "target disk (automatic — the installer asks no disk question):"
+lsblk -rno PATH,TYPE,SIZE,MODEL 2>/dev/null | awk '$2 == "disk" && $3 != "0"' | \
+    while IFS=' ' read -r p _t s rest; do printf '    %s  %6s  %s\n' "$p" "$s" "$rest"; done
+
+if [ -n "${DISK_ARG:-}" ]; then
+    DISK="$DISK_ARG"
+    [ -b "$DISK" ] || die "--disk $DISK_ARG is not a block device"
+    DISK_FRESH=""
+else
+    picked="$(pick_target_disk)"
+    [ -n "$picked" ] || die "no usable target disk found (>= 10 GiB, not the boot medium). Attach a disk or pass one: sudo kian-install --disk /dev/sdX"
+    DISK="${picked%%|*}"
+    rest="${picked#*|}"
+    DISK_SIZE="${rest%%|*}"
+    DISK_MODEL="${rest#*|}"
+    [ "$DISK_MODEL" = "$DISK_SIZE" ] && DISK_MODEL=""
+    disk_is_fresh "$DISK" && DISK_FRESH=1 || DISK_FRESH=""
+fi
+
+say "selected target disk: $DISK ${DISK_SIZE:+(${DISK_SIZE})} ${DISK_MODEL:+— ${DISK_MODEL}}"
+[ -n "${DISK_FRESH:-}" ] && say "the disk is completely empty — nothing can be lost"
+
+echo
+echo "==================================================================="
+echo "  EVERYTHING ON $DISK WILL BE ERASED AND REPLACED BY KIAN OS."
+echo "  Mirror: ${MIRROR_HOST}   Timezone: ${TIMEZONE}"
+echo "==================================================================="
+printf '\nContinuing in 10 seconds — press Ctrl+C to abort NOW, Enter to continue ... '
+read -t 10 -r _ || true
+echo
+
+# ---------------------------------------------------------------------------
+# Partition + format
+# ---------------------------------------------------------------------------
+if [ -d /sys/firmware/efi ]; then
+    BOOT_MODE="uefi"
+    say "UEFI system — GPT: 1 GiB ESP + ext4 root"
+    parted -s "$DISK" mklabel gpt \
+        mkpart ESP fat32 1MiB 1025MiB set 1 esp on \
+        mkpart root ext4 1025MiB 100% || die "partitioning failed (is $DISK in use?)"
+    case "$DISK" in
+        /dev/nvme*|/dev/mmcblk*) PART1="${DISK}p1"; PART2="${DISK}p2" ;;
+        *) PART1="${DISK}1"; PART2="${DISK}2" ;;
+    esac
+else
+    BOOT_MODE="bios"
+    say "BIOS system — MBR: ext4 root, GRUB in the MBR"
+    parted -s "$DISK" mklabel msdos mkpart primary ext4 1MiB 100% || die "partitioning failed (is $DISK in use?)"
+    case "$DISK" in
+        /dev/nvme*|/dev/mmcblk*) PART1="${DISK}p1" ;;
+        *) PART1="${DISK}1" ;;
+    esac
+    PART2=""
+fi
+sync
+wipefs -a "$DISK" >/dev/null 2>&1 || true
+
+if [ -n "$PART2" ]; then
+    mkfs.vfat -F32 -n KIAN_EFI "$PART1" || die "mkfs.vfat failed on $PART1"
+    mkfs.ext4 -F -L kianos "$PART2" || die "mkfs.ext4 failed on $PART2"
+else
+    mkfs.ext4 -F -L kianos "$PART1" || die "mkfs.ext4 failed on $PART1"
+fi
+
+umount -R "$MOUNT" 2>/dev/null || true
+mount "$PART2" "$MOUNT" || mount "$PART1" "$MOUNT" || die "could not mount the new root"
+if [ -n "$PART2" ]; then
+    mkdir -p "$MOUNT/boot/efi"
+    mount "$PART1" "$MOUNT/boot/efi" || die "could not mount the ESP"
+fi
+
+# ---------------------------------------------------------------------------
+# Copy the complete live root to the disk (offline install — the same
+# mechanism as Ubuntu's own live installers).
+# ---------------------------------------------------------------------------
+say "copying Kian OS from the live medium to $DISK (a few minutes; progress below) ..."
+if ! rsync -aAHXx --info=progress2 "${SRC_EXCLUDES[@]}" / "$MOUNT/" 2>&1 | tee "$LOG"; then
+    die "copy failed — see $LOG"
+fi
+
+write_target_sources
+
+# fstab from the real UUIDs
+{
+    root_uuid="$(blkid -s UUID -o value "$PART2")"
+    echo "UUID=${root_uuid}  /  ext4  errors=remount-ro  0  1"
+    if [ -n "$PART2" ]; then
+        efi_uuid="$(blkid -s UUID -o value "$PART1")"
+        echo "UUID=${efi_uuid}  /boot/efi  vfat  umask=0077  0  1"
+    fi
+} > "$MOUNT/etc/fstab"
+
+# ---------------------------------------------------------------------------
+# Configure the installed system in a chroot
+# ---------------------------------------------------------------------------
+export KIAN_TZ="$TIMEZONE" KIAN_BOOT_MODE="$BOOT_MODE" KIAN_DISK="$DISK"
+say "configuring timezone (${TIMEZONE}), locale, GRUB, initramfs ..."
+if ! chroot "$MOUNT" /bin/bash <<'CHROOT'
+set -euo pipefail
+. /etc/os-release 2>/dev/null || true
+ln -sf "/usr/share/zoneinfo/${KIAN_TZ}" /etc/localtime
+printf '%s\n' "${KIAN_TZ}" > /etc/timezone
+printf 'kian-os\n' > /etc/hostname
+printf '127.0.0.1\tlocalhost\n::1\t\tlocalhost\n127.0.1.1\tkian-os.localdomain\tkian-os\n' > /etc/hosts
+rm -f /etc/machine-id /var/lib/dbus/machine-id
+systemd-machine-id-setup >/dev/null
+echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+locale-gen >/dev/null
+update-locale LANG=en_US.UTF-8
+echo 'kian:kian' | chpasswd
+usermod -aG adm,cdrom,dip,lpadmin,plugdev,sudo kian 2>/dev/null || true
+update-initramfs -u >/dev/null
+if [ "${KIAN_BOOT_MODE}" = "uefi" ]; then
+    grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=KIAN_OS --recheck >/dev/null
+else
+    grub-install --target=i386-pc "${KIAN_DISK}" --recheck >/dev/null
+fi
+update-grub >/dev/null
+systemctl enable lightdm.service NetworkManager.service >/dev/null 2>&1 || true
+CHROOT
+then
+    die "system configuration failed — see $LOG"
+fi
+
+# Live-only bits must not exist on the installed system.
+if ! chroot "$MOUNT" /usr/local/bin/kian-cleanup-live-only; then
+    warn "could not run the live-only cleanup — check /etc/sudoers.d and the welcome autostart manually"
+fi
+
+sync
+umount -R "$MOUNT" 2>/dev/null || umount -l -R "$MOUNT" 2>/dev/null || true
+
+cat <<EOF
+
+===================================================================
+  Kian OS is installed on $DISK (timezone: ${TIMEZONE},
+  apt mirror: ${MIRROR_HOST}).
+===================================================================
+
+  * user: kian   password: kian   (change it after first login: passwd)
+  * boots into the Kian OS desktop (LightDM + XFCE)
+  * apt uses the regional mirror you chose: http://${MIRROR_HOST}/ubuntu/
+  * in your VM: power off, DETACH the ISO from the CD drive, then boot
+
+  Reboot now with:  sudo reboot
+EOF
+exit 0

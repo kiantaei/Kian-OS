@@ -1,0 +1,44 @@
+#!/bin/bash
+# Kian OS — desktop guard, runs once from XDG autostart after login.
+#
+# 1. Re-assert the panel position. WHY (evidence from CI): when the X screen
+#    mode changes shortly after login (QEMU/VMware randr picks the preferred
+#    mode), xfce4-panel can re-snap from a stale allocation and REWRITE its
+#    position as floating (p=0;x=100;y=30 was observed live). Re-docking the
+#    panel through xfconf is the supported, live-applied fix; it is a no-op if
+#    the panel already sits at the bottom (p=12 = SNAP_POSITION_S in
+#    xfce4-panel 4.20).
+# 2. Make sure the panel and the desktop are actually running. If either died
+#    during startup the user is left with an empty screen and nothing to click.
+# 3. Apply the Kian wallpaper to whatever output the VM really exposes, so a
+#    monitor name the shipped config did not predict cannot leave the desktop
+#    black.
+
+sleep "${KIAN_PANEL_FIX_DELAY:-8}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+
+xfconf-query -c xfce4-panel -p /panels/panel-1/position -n -t string -s "p=12;x=0;y=0" >/dev/null 2>&1
+xfconf-query -c xfce4-panel -p /panels/panel-1/position-locked -n -t bool -s true >/dev/null 2>&1
+
+# Restore a session component that failed to start.
+if ! pgrep -x xfce4-panel >/dev/null 2>&1; then
+    nohup xfce4-panel >/dev/null 2>&1 &
+fi
+if ! pgrep -x xfdesktop >/dev/null 2>&1; then
+    nohup xfdesktop >/dev/null 2>&1 &
+fi
+
+# Wallpaper for every connected output (VMware reports Virtual-1/Virtual1,
+# QEMU Virtual-1, real hardware eDP-1/LVDS-1/...).
+WALL=/usr/share/backgrounds/kian/kian-wallpaper.jpg
+if command -v xrandr >/dev/null 2>&1 && [ -f "$WALL" ]; then
+    for mon in $(xrandr --query 2>/dev/null | awk '/ connected/ {print $1}'); do
+        base="/backdrop/screen0/monitor${mon}/workspace0"
+        xfconf-query -c xfce4-desktop -p "${base}/last-image"   -n -t string -s "$WALL" >/dev/null 2>&1 || true
+        xfconf-query -c xfce4-desktop -p "${base}/image-style"  -n -t uint   -s 3       >/dev/null 2>&1 || true
+        xfconf-query -c xfce4-desktop -p "${base}/color-style"  -n -t uint   -s 0       >/dev/null 2>&1 || true
+    done
+fi
+
+touch /tmp/kian-panel-fix-ran
+exit 0

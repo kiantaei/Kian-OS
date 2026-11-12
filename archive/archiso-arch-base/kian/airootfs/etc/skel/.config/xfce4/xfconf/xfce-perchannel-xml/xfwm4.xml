@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- Kian OS window manager: dark Materia theme, 2 virtual desktops. -->
+
+<channel name="xfwm4" version="1.0">
+  <property name="theme" type="string" value="Materia-dark-compact"/>
+  <property name="workspace_count" type="int" value="2"/>
+  <property name="wrap_workspaces" type="bool" value="true"/>
+  <property name="show_dock_shadow" type="bool" value="false"/>
+  <property name="titleless_maximized_windows" type="bool" value="false"/>
+  <!-- Compositing OFF by default: in VMware/QEMU without 3D acceleration the
+       GLX-based compositor is the most common cause of black or garbled
+       windows. xfwm4 runs fine without it and the desktop looks identical on
+       the flat Materia theme. -->
+  <property name="use_compositing" type="bool" value="false"/>
+</channel>

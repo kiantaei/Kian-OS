@@ -1,0 +1,8 @@
+#!/bin/bash
+# Kian OS — remove live-only bits from an installed system.
+# Runs IN the chroot via calamares shellprocess (or kian-install) right
+# before the installed system is finalized. Nothing to do when the target
+# is not a copied live root.
+if [ -f /etc/sudoers.d/kian-live ]; then rm -f /etc/sudoers.d/kian-live; fi
+if [ -f /etc/xdg/autostart/kian-welcome.desktop ]; then rm -f /etc/xdg/autostart/kian-welcome.desktop; fi
+exit 0

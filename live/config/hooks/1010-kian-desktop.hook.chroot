@@ -1,0 +1,61 @@
+#!/bin/sh
+# Kian OS chroot hook — desktop + installer plumbing.
+# Runs inside the live-build chroot with root privileges (noble).
+
+set -e
+echo "[kian] chroot hook: desktop + installer plumbing"
+
+# grub-pc asks which device to install to via debconf; preseed it to nothing
+# so the build never blocks. kian-install/calamares run grub-install with an
+# explicit target on the installed system.
+debconf-set-selections <<'EOF'
+grub-pc grub-pc/install_devices multiselect
+grub-pc grub-pc/install_devices_empty boolean true
+EOF
+
+# LightDM is the display manager; make the symlink certain even if another
+# DM was pulled in by a dependency.
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl set-default graphical.target || true
+    systemctl enable lightdm.service || true
+fi
+
+# Desktop polish: Kian launchers in the menu DB, icon caches, XDG dirs.
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    for dir in /usr/share/icons/*/; do
+        gtk-update-icon-cache -f "$dir" >/dev/null 2>&1 || true
+    done
+fi
+
+# Falkon must exist (xenox wraps it); be loud now rather than a broken
+# launcher later.
+command -v falkon >/dev/null || { echo "FATAL: falkon missing"; exit 1; }
+command -v calamares >/dev/null || { echo "FATAL: calamares missing"; exit 1; }
+command -v rsync >/dev/null || { echo "FATAL: rsync missing"; exit 1; }
+command -v parted >/dev/null || { echo "FATAL: parted missing"; exit 1; }
+python3 -c "import ast; ast.parse(open('/usr/local/bin/kian-welcome').read())" || { echo "FATAL: kian-welcome does not compile"; exit 1; }
+bash -n /usr/local/bin/kian-install || { echo "FATAL: kian-install syntax"; exit 1; }
+bash -n /usr/local/bin/kian-persist || { echo "FATAL: kian-persist syntax"; exit 1; }
+bash -n /usr/local/bin/xenox || { echo "FATAL: xenox syntax"; exit 1; }
+bash -n /usr/local/bin/kian-cleanup-live-only || { echo "FATAL: cleanup syntax"; exit 1; }
+
+# The vendored automirror module needs python libcalamares + distro; the
+# config files must be parseable YAML — cheap sanity check.
+test -f /etc/calamares/settings.conf
+test -f /etc/calamares/branding/kian/branding.desc
+test -f /usr/lib/x86_64-linux-gnu/calamares/modules/automirror/main.py
+python3 -c "import yaml, sys; yaml.safe_load(open('/etc/calamares/settings.conf'))" \
+    || { echo "FATAL: settings.conf is not valid YAML"; exit 1; }
+
+# arch leftovers must be gone — this is an Ubuntu-based OS now.
+if command -v pacman >/dev/null 2>&1; then
+    echo "FATAL: pacman found in the chroot — Arch base was not removed"
+    exit 1
+fi
+
+# Apt hygiene for the live image (live-build cleans the cache too, but be
+# certain — the ISO must stay lean).
+apt-get clean >/dev/null 2>&1 || true
+
+echo "[kian] chroot hook: done"

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Kian Welcome
+Comment=Welcome to Kian OS — install it, or try it
+Exec=/usr/local/bin/kian-welcome
+Terminal=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Categories=System;

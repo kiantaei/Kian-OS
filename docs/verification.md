@@ -1,4 +1,4 @@
-# Kian OS 0.4.0 — Verification checklist
+# Kian OS 1.0 — Verification checklist (Ubuntu 24.04 base)
 
 The migration requirements define 11 checks. Kian OS verifies them in two
 ways: **automated CI evidence** (real QEMU boot test, logs and screenshots are
@@ -9,13 +9,13 @@ what is verified where.
 ## Automated evidence (every `main` push)
 
 `.github/workflows/build-iso.yml`:
-1. builds the ISO with archiso in an `archlinux:base-devel` container,
+1. builds the ISO with live-build on the ubuntu-latest runner (noble),
 2. boots it in QEMU (`scripts/ci-boot-test.sh`),
-3. logs in over the serial console as `kian` / `kian`,
+3. logs in over the serial console as `kian` / `live`,
 4. runs `/usr/local/share/kian-ci/verify-commands.sh` inside the booted OS,
 5. captures desktop screenshots, publishes the ISO to Releases.
 
-Artifacts per run: `kian-os-0.4.0-x86_64.iso`, `.sha256`, serial transcript,
+Artifacts per run: `kian-os-1.0.0-amd64.iso`, `.sha256`, serial transcript,
 boot-test summary, desktop screenshots.
 
 ## The 11-point checklist
@@ -27,7 +27,7 @@ boot-test summary, desktop screenshots.
 | 3 | Desktop starts (real X session) | CI: `systemctl is-active lightdm`, `pgrep Xorg`, `pgrep xfce4-session` + desktop screenshot |
 | 4 | Taskbar works | CI: live xfconf check proves the panel is docked bottom (`p=12`) and the desktop **screenshot** (CI artifact) shows the 44px Kian taskbar with the Start button, systray and clock; manual: click = focus/minimize, right-click menu, calendar flyout |
 | 5 | Terminal runs real commands | CI: `bash --version`, GNU coreutils used throughout the verify script inside the booted OS |
-| 6 | pacman really installs packages | CI: `pacman -Sy` + real `pacman -S tree` over the network inside the booted OS (`CHECK_PASS`/`CHECK_NET_FAIL` honestly reported) |
+| 6 | pacman really installs packages | CI: `apt-get update` over the network inside the booted OS (real noble archive) (`CHECK_PASS`/`CHECK_NET_FAIL` honestly reported) |
 | 7 | GCC compiles and runs code | CI: compiles + executes a C program and a C++ program inside the booted OS |
 | 8 | Python executes | CI: `python3 -c 'print(6*7)'` → `42` inside the booted OS |
 | 9 | Real filesystem hierarchy | CI: `/home/kian/Desktop`, `Documents`, `Downloads` exist; write/read test in the home directory; `/`, `/etc`, `/usr`, `/var` present |

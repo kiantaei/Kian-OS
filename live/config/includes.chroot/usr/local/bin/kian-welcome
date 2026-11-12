@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+# Kian OS — Welcome window.
+#
+# Opens automatically when the live session starts (via
+# /etc/xdg/autostart/kian-welcome.desktop). Offers the real graphical
+# installer (Calamares), the offline CLI installer (kian-install),
+# real persistence (kian-persist) and a terminal.
+#
+# LIVE-ONLY GUARD: this window only appears on the live medium
+# (/run/live/medium must exist). On an installed system it exits silently,
+# so the autostart entry that was copied to the disk is inert even before
+# kian-cleanup-live-only removes it.
+#
+# Usage:
+#   kian-welcome            # show the window
+#   kian-welcome --help     # this text
+
+import os
+import subprocess
+import sys
+
+MEDIUM = "/run/live/medium"
+LOGO = "/usr/share/backgrounds/kian/kian-wallpaper.jpg"
+VERSION_TEXT = "Kian OS 1.0 (Horizon) — Ubuntu 24.04 LTS base"
+
+HELP = """Kian OS Welcome — the window that opens on the live desktop.
+
+Buttons:
+  Install Kian OS (graphical)  — Calamares, like a normal installer
+  Install Kian OS (terminal)   — kian-install, asks mirror region + timezone,
+                                 works offline (rsync-copy, like Ubiquity)
+  Real persistence             — kian-persist: save the live session to disk
+  Terminal                     — open a terminal
+
+The window is live-session-only; an installed system never shows it.
+"""
+
+
+def live_only() -> bool:
+    return os.path.isdir(MEDIUM)
+
+
+def run_install_graphical(_widget=None) -> None:
+    # calamares-launch-normal is the Ubuntu-style wrapper (sudo -E keeps the
+    # X environment; the live user has passwordless sudo via kian-live
+    # sudoers — removed from the installed system by kian-cleanup-live-only).
+    subprocess.Popen(["/usr/bin/calamares-launch-normal"], start_new_session=True)
+
+
+def run_install_terminal(_widget=None) -> None:
+    subprocess.Popen(["xfce4-terminal", "-x", "sudo", "-E", "kian-install"],
+                     start_new_session=True)
+
+
+def run_persist(_widget=None) -> None:
+    subprocess.Popen(["xfce4-terminal", "-x", "sudo", "kian-persist"],
+                     start_new_session=True)
+
+
+def run_terminal(_widget=None) -> None:
+    subprocess.Popen(["xfce4-terminal"], start_new_session=True)
+
+
+def main() -> int:
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print(HELP)
+        return 0
+    if not live_only():
+        # Installed system: never nag. This also covers the copied-over
+        # autostart entry before the installer removes it.
+        return 0
+
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk, Gdk, GLib  # noqa: E402
+
+    win = Gtk.Window(title="Welcome to Kian OS")
+    win.set_default_size(560, 430)
+    win.set_position(Gtk.WindowPosition.CENTER)
+    win.set_resizable(False)
+    win.set_wmclass("kian-welcome", "kian-welcome")
+
+    css = Gtk.CssProvider()
+    css.load_from_data(b"""
+    .kian-root    { background-image: url('"""+LOGO.encode()+b"""');
+                    background-size: cover; }
+    .kian-title   { color: #ffffff; font-size: 26px; font-weight: bold;
+                    text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+    .kian-sub     { color: #e6e6e6; font-size: 12px;
+                    text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+    .kian-btn     { background-color: rgba(0,120,212,0.92); color: #ffffff;
+                    font-size: 15px; font-weight: bold; padding: 14px 10px;
+                    border-radius: 6px; border: none; }
+    .kian-btn:hover { background-color: rgba(16,132,226,0.98); }
+    .kian-btn2    { background-color: rgba(26,43,74,0.85); color: #ffffff;
+                    font-size: 13px; padding: 10px; border-radius: 6px;
+                    border: 1px solid rgba(255,255,255,0.25); }
+    .kian-btn2:hover { background-color: rgba(38,64,110,0.95); }
+    .kian-note    { color: #cfcfcf; font-size: 11px;
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
+    """)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                   margin=18)
+    root.get_style_context().add_class("kian-root")
+
+    title = Gtk.Label(label="Welcome to Kian OS")
+    title.get_style_context().add_class("kian-title")
+    sub = Gtk.Label(label=VERSION_TEXT)
+    sub.get_style_context().add_class("kian-sub")
+
+    def big_button(text, cb):
+        b = Gtk.Button(label=text)
+        b.get_style_context().add_class("kian-btn")
+        b.connect("clicked", cb)
+        return b
+
+    def small_button(text, cb):
+        b = Gtk.Button(label=text)
+        b.get_style_context().add_class("kian-btn2")
+        b.connect("clicked", cb)
+        return b
+
+    note = Gtk.Label(
+        label="Try it as long as you like — with Real persistence your\n"
+              "files, settings and apt installs really survive reboots.\n"
+              "Live login: kian / live   (sudo password: live)")
+    note.get_style_context().add_class("kian-note")
+
+    for w in (title, sub, big_button("Install Kian OS (graphical installer)",
+                                     run_install_graphical),
+              big_button("Install Kian OS (terminal — offline)",
+                         run_install_terminal),
+              small_button("Real persistence — really save this session",
+                           run_persist),
+              small_button("Open terminal", run_terminal),
+              note):
+        root.pack_start(w, False, False, 2)
+
+    win.add(root)
+    win.connect("destroy", Gtk.main_quit)
+    win.show_all()
+
+    # Do not steal focus fight with the desktop on autostart: present calmly.
+    GLib.timeout_add(600, lambda: (win.present(), False)[1])
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

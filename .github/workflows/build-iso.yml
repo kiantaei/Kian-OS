@@ -1,13 +1,14 @@
 name: Build Kian OS ISO
 
-# Builds the Linux-based Kian OS ISO with archiso inside an official
-# archlinux container, runs a REAL QEMU boot test (serial login as kian,
-# gcc/python/pacman checks, desktop screenshots) and uploads the ISO to
-# GitHub Releases. All results shown are real build/test outputs.
+# Builds the Kian OS ISO with live-build on the ubuntu-latest runner
+# (Ubuntu 24.04 noble — the same release the OS is based on), runs a REAL
+# QEMU boot test (serial login as kian/live, apt/calamares/persistence
+# checks, desktop screenshots) and uploads the ISO to GitHub Releases.
+# All results shown are real build/test outputs.
 
 on:
   push:
-    # Branches AND tags: without `tags` a `git push origin v0.4.0` matches no
+    # Branches AND tags: without `tags` a `git push origin v1.0.0` matches no
     # workflow at all, so the "Publish tagged release (v*)" step could never
     # run. Path filters are ignored by GitHub for tag pushes.
     branches: [ main ]
@@ -28,61 +29,45 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: archlinux:base-devel
-      options: --privileged
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Install build dependencies (live-build + QEMU test tools)
         run: |
-          pacman -Syu --noconfirm archiso grub syslinux mtools dosfstools \
-            qemu-desktop expect socat netpbm git
+          sudo apt-get update
+          sudo apt-get install -y live-build debootstrap squashfs-tools xorriso \
+            grub-pc-bin grub-efi-amd64-bin syslinux-common isolinux mtools \
+            binutils qemu-system-x86 expect socat netpbm git python3-yaml
 
       - name: Profile sanity checks
         run: |
-          bash -n archiso/kian/profiledef.sh
           bash -n build.sh
           bash -n scripts/ci-boot-test.sh
-          bash -n archiso/kian/airootfs/usr/local/bin/kian-setup
-          bash -n archiso/kian/airootfs/usr/local/bin/kian-install
-          bash -n archiso/kian/airootfs/usr/local/bin/kian-persist
-          bash -n archiso/kian/airootfs/usr/local/bin/kianinstall
-          bash -n archiso/kian/airootfs/usr/local/bin/kian-apply
-          bash -n archiso/kian/airootfs/usr/local/bin/kian-panel-position-fix
-          bash -n archiso/kian/airootfs/usr/local/bin/kian-trust-desktop
-          bash -n archiso/kian/airootfs/usr/bin/xenox
-          bash -n archiso/kian/airootfs/usr/local/share/kian-ci/verify-commands.sh
-          # the pinned kianinstall fork must be reachable before we spend time
-          # building an ISO (ls-remote = plain HTTPS query, works everywhere)
-          echo "checking kianinstall fork pinned commit ..."
-          git ls-remote https://github.com/kiantaei/kianinstall.git refs/tags/kianinstall-v4.5
-          git ls-remote https://github.com/kiantaei/kianinstall.git refs/tags/kianinstall-v4.5 | grep -q 17965c0d614d157290bb4324acff1c807d1b5e73 \
-            || { echo "ERROR: pinned kianinstall commit 17965c0d (tag kianinstall-v4.5) is not reachable"; exit 1; }
-          echo "kianinstall fork pinned commit reachable"
+          bash -n live/auto/config
+          for hook in live/config/hooks/*.hook.chroot; do
+            bash -n "$hook"
+          done
+          for tool in kian-install kian-persist xenox kian-cleanup-live-only; do
+            bash -n "live/config/includes.chroot/usr/local/bin/$tool"
+          done
+          python3 -c "import ast; ast.parse(open('live/config/includes.chroot/usr/local/bin/kian-welcome').read())"
+          python3 -c "import yaml; yaml.safe_load(open('live/config/includes.chroot/etc/calamares/settings.conf'))"
+          test -f live/config/includes.chroot/etc/os-release
+          grep -q "ID=kian" live/config/includes.chroot/etc/os-release
+          grep -q "ID_LIKE=.*ubuntu" live/config/includes.chroot/etc/os-release
+          test -f live/config/includes.chroot/etc/calamares/branding/kian/branding.desc
+          test -f live/config/includes.chroot/usr/lib/x86_64-linux-gnu/calamares/modules/automirror/main.py
+          echo "profile sanity checks passed"
 
-      - name: Vendor the kianinstall fork (pinned commit)
-        run: |
-          bash scripts/vendor-kianinstall.sh archiso/kian build/work
-          test -f archiso/kian/airootfs/opt/kianinstall/archinstall/__main__.py \
-            || { echo "ERROR: kianinstall fork was not vendored into the profile"; exit 1; }
-
-      - name: Build ISO with mkarchiso
-        run: |
-          mkdir -p build/work build/out
-          mkarchiso -v -w build/work -o build/out archiso/kian
-
-      - name: Remove the vendor copy from the profile (keep the tree clean)
-        if: always()
-        run: bash scripts/vendor-kianinstall.sh --clean archiso/kian
+      - name: Build ISO with live-build
+        run: sudo ./build.sh
 
       - name: Checksums
         run: |
-          cd build/out
-          ls -lh
-          sha256sum kian-os-*.iso > kian-os-0.4.0-x86_64.iso.sha256
-          cat kian-os-0.4.0-x86_64.iso.sha256
+          cd live
+          ls -lh kian-os-*.iso kian-os-*.sha256
+          cat kian-os-*.sha256
 
       # The ISO is published even if the GUI boot test fails, so the artifact
       # is never lost; the run is then marked failed by the final gate below
@@ -92,7 +77,8 @@ jobs:
         continue-on-error: true
         timeout-minutes: 60
         run: |
-          bash scripts/ci-boot-test.sh build/out/kian-os-0.4.0-x86_64.iso build/test
+          ISO=$(ls live/kian-os-*.iso | head -n1)
+          bash scripts/ci-boot-test.sh "$ISO" build/test
           cat build/test/boot-test-summary.txt
           echo "----- serial transcript (first 120 lines) -----"
           head -120 build/test/kian-serial-transcript.txt || true
@@ -103,37 +89,39 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kian-os-0.4.0-build
+          name: kian-os-1.0.0-build
           path: |
-            build/out/*.iso
-            build/out/*.sha256
+            live/kian-os-*.iso
+            live/kian-os-*.sha256
             build/test/*
           if-no-files-found: warn
 
       - name: Publish rolling release (main)
-        if: always() && github.ref == 'refs/heads/main' && hashFiles('build/out/*.iso') != ''
+        if: always() && github.ref == 'refs/heads/main' && hashFiles('live/kian-os-*.iso') != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "Kian OS 0.4.0 rolling build"
+          name: "Kian OS 1.0 rolling build (Ubuntu 24.04 base)"
           prerelease: true
           overwrite_files: true
           fail_on_unmatched_files: true
           body: |
-            Automated rolling build of Kian OS 0.4.0 "Horizon" (Linux-based).
+            Automated rolling build of Kian OS 1.0 "Horizon" — Ubuntu 24.04 LTS base.
 
             - commit: ${{ github.sha }}
-            - built with archiso in an archlinux:base-devel container
+            - built with live-build on the ubuntu-latest runner (noble)
             - QEMU boot test: **${{ steps.boottest.outcome }}**
 
             Boot it in VMware (primary target), QEMU or VirtualBox.
-            Live login: `kian` / `kian`.
+            Live login: `kian` / `live`. The Welcome window opens on the
+            desktop: graphical installer (Calamares), offline CLI installer
+            (`sudo kian-install`), and real persistence (`sudo kian-persist`).
           files: |
-            build/out/*.iso
-            build/out/*.sha256
+            live/kian-os-*.iso
+            live/kian-os-*.sha256
 
       - name: Publish tagged release (v*)
-        if: always() && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && hashFiles('build/out/*.iso') != ''
+        if: always() && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && hashFiles('live/kian-os-*.iso') != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -143,15 +131,15 @@ jobs:
           overwrite_files: true
           fail_on_unmatched_files: true
           body: |
-            Kian OS ${{ github.ref_name }} "Horizon" — Linux-based desktop operating system.
+            Kian OS ${{ github.ref_name }} "Horizon" — Ubuntu 24.04 LTS base,
+            XFCE desktop, Calamares graphical installer, real live persistence.
 
-            Built with archiso (Arch Linux base). See README.md for details and
-            the verification checklist.
+            See README.md for details and the verification checklist.
 
             - QEMU boot test: **${{ steps.boottest.outcome }}**
           files: |
-            build/out/*.iso
-            build/out/*.sha256
+            live/kian-os-*.iso
+            live/kian-os-*.sha256
 
       # Keep the run honest: the ISO is already uploaded, but a failed boot
       # test must still turn the workflow red.
