@@ -83,6 +83,10 @@ grub-efi-amd64
 grub-efi-amd64-bin
 grub-pc-bin
 shim-signed
+# isohybrid (post-processes the ISO into a hybrid/USB-bootable image);
+# lb_binary_iso checks for it INSIDE the chroot, and on noble it moved from
+# the syslinux package into syslinux-utils.
+syslinux-utils
 efibootmgr
 initramfs-tools
 
