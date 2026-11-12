@@ -35,52 +35,16 @@ command -v mkarchiso >/dev/null 2>&1 || die "mkarchiso not found. Install: pacma
 [[ $(id -u) -eq 0 ]] || die "mkarchiso needs root: run with sudo"
 
 # ---- vendor the kianinstall fork -------------------------------------------
-# The ISO ships Kian's own fork of archinstall
-# (https://github.com/kiantaei/kianinstall) pinned to a commit, vendored into
-# the image at /opt/kianinstall so the installer works offline. The copy into
-# the profile is build-time only: it is removed again when this script exits,
-# so the git tree stays clean.
-KIANINSTALL_REPO="https://github.com/kiantaei/kianinstall.git"
-KIANINSTALL_REF="17965c0d614d157290bb4324acff1c807d1b5e73"   # tag: kianinstall-v4.5
-VENDOR_SRC="${WORK}/kianinstall-vendor"
-VENDOR_DST="${PROFILE}/airootfs/opt/kianinstall"
-
-prepare_vendor_src() {
-    rm -rf "${VENDOR_SRC}"
-    mkdir -p "${VENDOR_SRC}"
-    # Fetch exactly the pinned commit (minimal download, independent of
-    # branches); fall back to a full clone+checkout.
-    if ! (git -C "${VENDOR_SRC}" init -q \
-          && git -C "${VENDOR_SRC}" remote add origin "${KIANINSTALL_REPO}" \
-          && git -C "${VENDOR_SRC}" fetch -q --depth 1 origin "${KIANINSTALL_REF}" \
-          && git -C "${VENDOR_SRC}" checkout -q FETCH_HEAD); then
-        say "shallow fetch of ${KIANINSTALL_REF} failed — trying a full clone"
-        rm -rf "${VENDOR_SRC}"
-        git clone -q "${KIANINSTALL_REPO}" "${VENDOR_SRC}" \
-            && git -C "${VENDOR_SRC}" checkout -q "${KIANINSTALL_REF}" \
-            || { say "WARNING: could not clone the kianinstall fork (offline?) — the ISO will fall back to pacman's archinstall"; return 1; }
-    fi
-    return 0
-}
-
-VENDOR_OK=1
-if [[ -d "${VENDOR_SRC}" ]]; then
-    # reuse a previous build's checkout; just move to the pinned commit
-    git -C "${VENDOR_SRC}" fetch -q origin "${KIANINSTALL_REF}" 2>/dev/null || true
-    git -C "${VENDOR_SRC}" checkout -q "${KIANINSTALL_REF}" 2>/dev/null || VENDOR_OK=0
-else
-    prepare_vendor_src || VENDOR_OK=0
-fi
-
-rm -rf "${VENDOR_DST}"
-if [[ ${VENDOR_OK} -eq 1 && -d "${VENDOR_SRC}/archinstall" ]]; then
-    mkdir -p "${VENDOR_DST}"
-    cp -a "${VENDOR_SRC}/archinstall" "${VENDOR_SRC}/pyproject.toml" "${VENDOR_SRC}/README.md" "${VENDOR_SRC}/LICENSE" "${VENDOR_DST}/"
-    find "${VENDOR_DST}" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
-    say "vendored kianinstall at ${KIANINSTALL_REF} into airootfs/opt/kianinstall"
-fi
-# the vendor copy lives only inside mkarchiso's run; keep the git tree clean
-cleanup_vendor() { rm -rf "${VENDOR_DST}"; }
+# The ISO ships Kian's own fork of archinstall pinned to a commit, vendored
+# into the image at /opt/kianinstall so the installer works offline. The copy
+# into the profile is build-time only: it is removed again when this script
+# exits, so the git tree stays clean. (The CI workflow vendors with the same
+# script before calling mkarchiso directly.)
+say "vendoring the kianinstall fork (pinned commit) ..."
+mkdir -p "${WORK}"
+bash "${ROOT}/scripts/vendor-kianinstall.sh" "${PROFILE}" "${WORK}" \
+    || say "kianinstall fork not vendored — the ISO falls back to pacman's archinstall"
+cleanup_vendor() { bash "${ROOT}/scripts/vendor-kianinstall.sh" --clean "${PROFILE}"; }
 trap cleanup_vendor EXIT
 
 say "building Kian OS ISO (this downloads Arch packages; takes a while) ..."

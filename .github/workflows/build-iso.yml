@@ -61,10 +61,20 @@ jobs:
             || { echo "ERROR: pinned kianinstall commit 17965c0d (tag kianinstall-v4.5) is not reachable"; exit 1; }
           echo "kianinstall fork pinned commit reachable"
 
+      - name: Vendor the kianinstall fork (pinned commit)
+        run: |
+          bash scripts/vendor-kianinstall.sh archiso/kian build/work
+          test -f archiso/kian/airootfs/opt/kianinstall/archinstall/__main__.py \
+            || { echo "ERROR: kianinstall fork was not vendored into the profile"; exit 1; }
+
       - name: Build ISO with mkarchiso
         run: |
           mkdir -p build/work build/out
           mkarchiso -v -w build/work -o build/out archiso/kian
+
+      - name: Remove the vendor copy from the profile (keep the tree clean)
+        if: always()
+        run: bash scripts/vendor-kianinstall.sh --clean archiso/kian
 
       - name: Checksums
         run: |
