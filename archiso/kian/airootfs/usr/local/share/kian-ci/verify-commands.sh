@@ -124,7 +124,25 @@ P2="$(xfconf-query -c xfce4-panel -p /panels/panel-1/position 2>&1 | tail -1)"
 echo "EVIDENCE: position right after fix: $P1 ; after 5s: $P2"
 [[ "$P2" == "p=12"* ]] && ok "panel: live position docked bottom (p=12)" || bad "panel: live position is '$P2' (expected p=12...)"
 
-# 8. Timezone (Kian identity)
+# 8. kianinstall — Kian's own archinstall fork, vendored into the ISO
+if [ -x /usr/local/bin/kianinstall ]; then
+    ok "kianinstall: launcher on PATH (/usr/local/bin/kianinstall)"
+else
+    bad "kianinstall: launcher missing"
+fi
+if [ -f /opt/kianinstall/archinstall/__main__.py ] && [ -f /opt/kianinstall/LICENSE ]; then
+    ok "kianinstall: fork vendored at /opt/kianinstall ($(du -sh /opt/kianinstall | cut -f1))"
+else
+    bad "kianinstall: vendored fork missing at /opt/kianinstall"
+fi
+KIANV="$(timeout 60 kianinstall --version 2>/dev/null | tail -n1)"
+if [ -n "$KIANV" ]; then
+    ok "kianinstall: runs and reports '$KIANV'"
+else
+    bad "kianinstall: --version produced no output (import failure?)"
+fi
+
+# 9. Timezone (Kian identity)
 [[ "$(readlink -f /etc/localtime)" == *Asia/Tehran* ]] && ok "timezone: Asia/Tehran" || bad "timezone: $(readlink -f /etc/localtime 2>/dev/null || echo none)"
 
 echo "===== summary: PASS=${PASS} FAIL=${FAIL} ====="

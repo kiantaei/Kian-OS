@@ -9,8 +9,10 @@ Kian OS is a Linux-based desktop operating system (Arch Linux base).
   * Real pacman:   pacman -Syu          (update)
                    pacman -S <pkg>      (install — needs internet)
   * Real Bash:     every GNU coreutils command works
-  * Install:       sudo kian-install    (archinstall; set Disk first)
-  * Branding:      sudo kian-apply       (Kian files onto an installed Arch)
+  * Install:       sudo kianinstall     (Kian OS installer — our own fork of
+                                        archinstall, works offline; set Disk first)
+                   sudo kian-install    (same installer + auto Kian branding after)
+  * Branding:      sudo kian-apply      (Kian files onto an installed Arch)
   * Sudo:          kian is in wheel; password is the user password
   * Login:         user `kian`, password `kian` (live session default)
   * Root login is disabled; privilege escalation is via sudo only.

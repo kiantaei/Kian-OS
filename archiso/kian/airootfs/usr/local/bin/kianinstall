@@ -1,0 +1,19 @@
+#!/bin/bash
+# Kian OS — installer launcher.
+#
+# Runs the kianinstall fork of archinstall
+# (https://github.com/kiantaei/kianinstall, pinned commit baked into this
+# ISO at /opt/kianinstall). The fork is unmodified upstream installer logic,
+# rebranded and pinned so the ISO works offline — no build-time or boot-time
+# downloads for the installer itself.
+#
+# If the vendor tree is missing (only possible when the ISO was built while
+# offline, see build.sh), it falls back to the pacman-installed archinstall
+# and says so honestly.
+
+if [ -f /opt/kianinstall/archinstall/__main__.py ]; then
+    exec env PYTHONPATH=/opt/kianinstall python -m archinstall "$@"
+fi
+
+echo "kianinstall: vendored fork not found on this ISO — using the installed archinstall instead" >&2
+exec archinstall "$@"

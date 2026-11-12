@@ -41,11 +41,11 @@ Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox).
 | **Apps** | Proper `.desktop` registration: Xenox Browser, Kian Terminal, File Manager (Thunar), Notepad (Mousepad), Calculator (galculator), Settings, Task Manager. |
 | **Users** | Real accounts: `kian` (uid 1000, wheel/sudo) created by `kian-setup.service`; root locked; desktop never runs as root. |
 | **Filesystem** | Real hierarchy: `/`, `/home/kian` with `Desktop/ Documents/ Downloads/ Music/ Pictures/ Videos/`. |
-| **Installer** | Real **archinstall** is included — boot the ISO, run `sudo kian-install` to install an Arch base and then apply the Kian OS branding to it (`kian-apply`). Choose "Exit" at archinstall's post-install screen so the branding step runs; see *Installed system*. |
+| **Installer** | **kianinstall** — Kian's own fork of archinstall ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall), vendored into the ISO at `/opt/kianinstall`, works offline). `sudo kianinstall` installs an Arch base; `sudo kian-install` runs the same fork and then applies the Kian OS branding (`kian-apply`). Choose "Exit" at the installer's post-install screen so the branding step runs; see *Installed system*. |
 
 ## Boot menu (GRUB/syslinux)
 
-- **Kian OS 0.4.0 (Horizon)** — default entry, 5 s timeout
+- **Kian OS 0.4.0 (Horizon)** — default entry, 1 s timeout (arrow keys keep the menu open)
 - Kian OS with hardware clock in UTC
 - UEFI Firmware Settings / Boot existing OS / Reboot / Power off
 
@@ -108,10 +108,15 @@ steps; see [`docs/verification.md`](docs/verification.md). Quick manual pass:
    (log out to see the LightDM greeter).
 3. Use the taskbar/start menu, open **Kian Terminal** and try `pacman -Syu`,
    `gcc`, `python3`, `neofetch`, `sudo pacman -S tree`.
-4. `sudo kian-install` installs an Arch base to a disk (choose the default
-   "xorg-server + lightdm + xfce4" style profile packages or let archinstall
-   pick its defaults). Set **Disk configuration** before choosing Install.
-5. At archinstall's post-install screen choose **Exit**, not **Reboot** —
+4. `sudo kianinstall` installs an Arch base to a disk. This is **Kian's own
+   fork of archinstall** ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall),
+   pinned to a commit and vendored into the ISO at `/opt/kianinstall`, so the
+   installer works offline). The installer logic is unmodified upstream
+   archinstall code — GPL-3.0-only, all credit to the Arch Linux archinstall
+   contributors. `sudo kian-install` runs the same fork and adds automatic
+   Kian branding afterwards (see below). Set **Disk configuration** before
+   choosing Install.
+5. At the installer's post-install screen choose **Exit**, not **Reboot** —
    `kian-install` then runs `kian-apply` to put the Kian identity, wallpaper,
    applications and panel defaults onto the new system. Reboot from the live
    shell afterwards.

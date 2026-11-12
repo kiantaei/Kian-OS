@@ -67,8 +67,18 @@ again and run `sudo kian-apply` — no data is lost either way.
 EOF
 fi
 
-# archinstall stays in the foreground; we regain control when it exits.
-"$ARCHINSTALL" "$@"
+# The installer stays in the foreground; we regain control when it exits.
+# Prefer Kian's own fork (kianinstall — https://github.com/kiantaei/kianinstall,
+# vendored into this ISO at /opt/kianinstall, same upstream guided installer,
+# Kian-branded and pinned so it works offline); fall back to pacman's
+# archinstall if the vendor tree is missing.
+if [ -x /usr/local/bin/kianinstall ] && [ -f /opt/kianinstall/archinstall/__main__.py ]; then
+    say "launching kianinstall (Kian OS fork of archinstall, vendored in this ISO)"
+    /usr/local/bin/kianinstall "$@"
+else
+    say "launching the installed archinstall (kianinstall fork not vendored on this ISO)"
+    "$ARCHINSTALL" "$@"
+fi
 status=$?
 
 if [ "$status" -ne 0 ]; then
