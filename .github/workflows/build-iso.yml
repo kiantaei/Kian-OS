@@ -2,12 +2,17 @@ name: Build Kian OS ISO
 
 # Builds the Linux-based Kian OS ISO with archiso inside an official
 # archlinux container, runs a REAL QEMU boot test (serial login as kian,
-# gcc/python/pacman checks, desktop screenshots) and publishes the ISO to
+# gcc/python/pacman checks, desktop screenshots) and uploads the ISO to
 # GitHub Releases. All results shown are real build/test outputs.
 
 on:
   push:
+    # Branches AND tags: without `tags` a `git push origin v0.4.0` matches no
+    # workflow at all, so the "Publish tagged release (v*)" step could never
+    # run. Path filters are ignored by GitHub for tag pushes.
     branches: [ main ]
+    tags:
+      - 'v*'
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -41,6 +46,7 @@ jobs:
           bash -n build.sh
           bash -n scripts/ci-boot-test.sh
           bash -n archiso/kian/airootfs/usr/local/bin/kian-setup
+          bash -n archiso/kian/airootfs/usr/local/bin/kian-panel-position-fix
           bash -n archiso/kian/airootfs/usr/bin/xenox
           bash -n archiso/kian/airootfs/usr/local/share/kian-ci/verify-commands.sh
           echo "profile sanity checks passed"
@@ -57,7 +63,12 @@ jobs:
           sha256sum kian-os-*.iso > kian-os-0.4.0-x86_64.iso.sha256
           cat kian-os-0.4.0-x86_64.iso.sha256
 
+      # The ISO is published even if the GUI boot test fails, so the artifact
+      # is never lost; the run is then marked failed by the final gate below
+      # and the release notes state the boot-test outcome honestly.
       - name: Real QEMU boot test (BIOS + serial login + desktop)
+        id: boottest
+        continue-on-error: true
         timeout-minutes: 60
         run: |
           bash scripts/ci-boot-test.sh build/out/kian-os-0.4.0-x86_64.iso build/test
@@ -78,36 +89,53 @@ jobs:
             build/test/*
           if-no-files-found: warn
 
-      - name: Publish rolling release (main branch)
-        if: github.ref == 'refs/heads/main' && success()
-        uses: ncipollo/release-action@v1
+      - name: Publish rolling release (main)
+        if: always() && github.ref == 'refs/heads/main' && hashFiles('build/out/*.iso') != ''
+        uses: softprops/action-gh-release@v2
         with:
-          allowUpdates: true
-          replacesArtifacts: true
-          removeArtifacts: true
-          tag: latest
+          tag_name: latest
           name: "Kian OS 0.4.0 rolling build"
           prerelease: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
           body: |
             Automated rolling build of Kian OS 0.4.0 "Horizon" (Linux-based).
 
             - commit: ${{ github.sha }}
             - built with archiso in an archlinux:base-devel container
-            - passed the automated QEMU boot test (login, gcc, python, pacman, filesystem, desktop services)
+            - QEMU boot test: **${{ steps.boottest.outcome }}**
 
-            Boot it in VMware (primary target), QEMU or VirtualBox. Live login: `kian` / `kian`.
-          artifacts: "build/out/kian-os-*.iso,build/out/*.sha256"
+            Boot it in VMware (primary target), QEMU or VirtualBox.
+            Live login: `kian` / `kian`.
+          files: |
+            build/out/*.iso
+            build/out/*.sha256
 
       - name: Publish tagged release (v*)
-        if: startsWith(github.ref, 'refs/tags/v') && success()
-        uses: ncipollo/release-action@v1
+        if: always() && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && hashFiles('build/out/*.iso') != ''
+        uses: softprops/action-gh-release@v2
         with:
-          allowUpdates: true
-          replacesArtifacts: true
+          tag_name: ${{ github.ref_name }}
           name: "Kian OS ${{ github.ref_name }}"
+          prerelease: false
+          make_latest: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
           body: |
             Kian OS ${{ github.ref_name }} "Horizon" — Linux-based desktop operating system.
 
             Built with archiso (Arch Linux base). See README.md for details and
             the verification checklist.
-          artifacts: "build/out/kian-os-*.iso,build/out/*.sha256"
+
+            - QEMU boot test: **${{ steps.boottest.outcome }}**
+          files: |
+            build/out/*.iso
+            build/out/*.sha256
+
+      # Keep the run honest: the ISO is already uploaded, but a failed boot
+      # test must still turn the workflow red.
+      - name: Fail the run if the boot test failed
+        if: steps.boottest.outcome == 'failure'
+        run: |
+          echo "::error::QEMU boot test failed. The ISO was uploaded but is marked as failing in the release notes."
+          exit 1
