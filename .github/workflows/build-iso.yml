@@ -53,14 +53,13 @@ jobs:
           bash -n archiso/kian/airootfs/usr/local/bin/kian-trust-desktop
           bash -n archiso/kian/airootfs/usr/bin/xenox
           bash -n archiso/kian/airootfs/usr/local/share/kian-ci/verify-commands.sh
-          # the pinned kianinstall fork must be reachable and contain the
-          # launcher entry point before we spend time building an ISO
-          git init -q /tmp/kianinstall-pin-check \
-            && git -C /tmp/kianinstall-pin-check remote add origin https://github.com/kiantaei/kianinstall.git \
-            && git -C /tmp/kianinstall-pin-check fetch -q --depth 1 origin 17965c0d614d157290bb4324acff1c807d1b5e73 \
-            && test -f /tmp/kianinstall-pin-check/archinstall/__main__.py \
-            && rm -rf /tmp/kianinstall-pin-check \
-            && echo "kianinstall fork pinned commit reachable"
+          # the pinned kianinstall fork must be reachable before we spend time
+          # building an ISO (ls-remote = plain HTTPS query, works everywhere)
+          echo "checking kianinstall fork pinned commit ..."
+          git ls-remote https://github.com/kiantaei/kianinstall.git refs/tags/kianinstall-v4.5
+          git ls-remote https://github.com/kiantaei/kianinstall.git refs/tags/kianinstall-v4.5 | grep -q 17965c0d614d157290bb4324acff1c807d1b5e73 \
+            || { echo "ERROR: pinned kianinstall commit 17965c0d (tag kianinstall-v4.5) is not reachable"; exit 1; }
+          echo "kianinstall fork pinned commit reachable"
 
       - name: Build ISO with mkarchiso
         run: |
