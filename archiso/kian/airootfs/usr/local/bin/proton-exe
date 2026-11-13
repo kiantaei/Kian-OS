@@ -80,14 +80,23 @@ find_proton() {
 }
 
 PROTON_DIR=""
+PROTON_TOKEN=""
 if [ -n "$PROTON_REQ" ]; then
-    if [ -d "$PROTON_REQ" ] && [ -x "$PROTON_REQ/proton" ]; then
-        PROTON_DIR="$(readlink -f "$PROTON_REQ")"
-    elif [ -d "$HOME/.local/share/Steam/compatibilitytools.d/$PROTON_REQ" ]; then
-        PROTON_DIR="$HOME/.local/share/Steam/compatibilitytools.d/$PROTON_REQ"
-    else
-        die "'$PROTON_REQ' is not a Proton directory (it must contain an executable 'proton')"
-    fi
+    case "$PROTON_REQ" in
+        UMU-Proton|UMU-Latest|GE-Proton|GE-Latest)
+            # Build codenames umu-launcher downloads itself.
+            PROTON_TOKEN="$PROTON_REQ"
+            ;;
+        *)
+            if [ -d "$PROTON_REQ" ] && [ -x "$PROTON_REQ/proton" ]; then
+                PROTON_DIR="$(readlink -f "$PROTON_REQ")"
+            elif [ -d "$HOME/.local/share/Steam/compatibilitytools.d/$PROTON_REQ" ]; then
+                PROTON_DIR="$HOME/.local/share/Steam/compatibilitytools.d/$PROTON_REQ"
+            else
+                die "'$PROTON_REQ' is neither a Proton directory (needs an executable 'proton') nor a codename (UMU-Proton, UMU-Latest, GE-Proton, GE-Latest)"
+            fi
+            ;;
+    esac
 else
     PROTON_DIR="$(find_proton || true)"
 fi
@@ -103,8 +112,11 @@ mkdir -p "$PREFIX" || die "cannot create prefix directory $PREFIX"
 
 if [ -n "$PROTON_DIR" ]; then
     say "Proton: $PROTON_DIR"
+elif [ -n "$PROTON_TOKEN" ]; then
+    say "Proton: $PROTON_TOKEN (downloaded by umu-launcher on first use)"
 else
     say "no local Proton build found — umu will use UMU-Proton (Proton Experimental based)"
+    say "the first run downloads UMU-Proton + the Steam Linux Runtime (needs internet)"
 fi
 say "prefix: $WINEPREFIX"
 
@@ -115,9 +127,35 @@ cd "$(dirname "$EXE")" 2>/dev/null || cd "$HOME" || true
 if command -v umu-run >/dev/null 2>&1; then
     export GAMEID="${GAMEID:-0}"          # 0 = no game-specific protonfixes
     export PROTON_VERB="${PROTON_VERB:-waitforexitandrun}"
-    [ -n "$PROTON_DIR" ] && export PROTONPATH="$PROTON_DIR"
+    if [ -n "$PROTON_DIR" ]; then
+        export PROTONPATH="$PROTON_DIR"
+    elif [ -n "$PROTON_TOKEN" ]; then
+        export PROTONPATH="$PROTON_TOKEN"
+    fi
     # umu downloads Proton/runtime on first use and prints its progress.
-    exec umu-run "$EXE" "${ARGS[@]}"
+    umu-run "$EXE" "${ARGS[@]}"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        cat >&2 <<'EOF'
+
+proton-exe: Proton could not start.
+
+  * The first run downloads Proton and the Steam Linux Runtime, so it needs
+    internet (GitHub for the Proton archive, Steam CDN for the runtime).
+    Behind a proxy, export it first:  export HTTPS_PROXY=http://host:port
+
+  * If the download is blocked, use a Proton build you already have:
+        proton-exe --proton /path/to/Proton-Experimental app.exe
+
+  * Or ask umu for a specific build:
+        proton-exe --proton GE-Proton app.exe
+        proton-exe --proton UMU-Proton app.exe
+
+  * Or install Valve's "Proton Experimental" through Steam and re-run
+    (proton-exe picks it up automatically).
+EOF
+    fi
+    exit "$rc"
 fi
 
 if [ -n "$PROTON_DIR" ]; then
