@@ -388,6 +388,13 @@ PKGS=(
     git python nano bash-completion htop tree man-db fastfetch
     open-vm-tools qemu-guest-agent
 )
+# The os-release identity hook (the host's /etc/pacman.d/hooks is picked up
+# by the pacstrap target) fires during the transaction below. Give it its
+# source file up front so it succeeds quietly instead of printing a harmless
+# "cannot stat /usr/share/kian/os-release" warning (seen on real hardware).
+mkdir -p "$MOUNT/usr/share/kian"
+cp /usr/share/kian/os-release "$MOUNT/usr/share/kian/os-release" 2>/dev/null || true
+
 say "installing Kian OS to $DISK (${#PKGS[@]} packages — this downloads a few GB, choose the biggest number for your region next time for speed)"
 if ! pacstrap -K "$MOUNT" "${PKGS[@]}" 2>&1 | tee "$LOG"; then
     die "package installation failed — see $LOG (mirror region choice affects speed; try a closer region)"
@@ -396,9 +403,9 @@ fi
 say "writing /etc/fstab (from the mounted target) ..."
 genfstab -U "$MOUNT" > "$MOUNT/etc/fstab" || die "genfstab failed"
 # genfstab -U writes entry lines that START with "UUID=" (plus '#' comment
-# lines) — no line ever starts with '/'. The old check `grep -q '^/'`
-# therefore matched nothing and killed EVERY completed install with
-# "fstab came out empty" (seen on real hardware). The root entry is the
+# lines) — no line ever starts with a slash, so the old check (which grepped
+# for a leading slash) matched nothing and killed EVERY completed install
+# with "fstab came out empty" (seen on real hardware). The root entry is the
 # line whose SECOND field is exactly "/":
 awk '$2 == "/" {found=1} END {exit !found}' "$MOUNT/etc/fstab" \
     || die "fstab came out empty — no root entry for the target ($MOUNT)"

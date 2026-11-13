@@ -23,6 +23,10 @@ ISO="${1:?usage: ci-install-test.sh <iso> <diskimg> <outdir>}"
 DISKIMG="${2:?usage: ci-install-test.sh <iso> <diskimg> <outdir>}"
 OUTDIR="${3:?usage: ci-install-test.sh <iso> <diskimg> <outdir>}"
 TRANSCRIPT=/tmp/kian-install-test-transcript.txt
+# The expect script reads these via $env(ISO) / $env(DISKIMG) — they MUST be
+# exported or qemu is spawned with an empty -cdrom and the test dies at spawn
+# (this is exactly what failed run 43484412717's install test).
+export ISO DISKIMG
 
 command -v expect   >/dev/null || { echo "FATAL: expect missing"; exit 2; }
 command -v qemu-system-x86_64 >/dev/null || { echo "FATAL: qemu missing"; exit 2; }

@@ -81,7 +81,15 @@ if timeout 300 $PACMAN -Sy --noconfirm >/tmp/kian-pacman-sy.log 2>&1; then
         echo "NOTE: archlinux-keyring update failed; installing with the build-time keyring"
     fi
     sudo -n pacman-key --populate archlinux >/dev/null 2>&1 || true
-    if timeout 300 $PACMAN -S --noconfirm tree >>/tmp/kian-pacman-sy.log 2>&1 && command -v tree >/dev/null; then
+    # One honest retry: run 43484412717 failed here when a mirror dropped
+    # mid-download (-Sy had succeeded, so the network was up). The retry is
+    # real work, not a fabricated pass — if it fails twice, NET_FAIL stands.
+    if ! timeout 300 $PACMAN -S --noconfirm tree >>/tmp/kian-pacman-sy.log 2>&1; then
+        echo "NOTE: first tree install failed — resyncing databases and retrying once"
+        $PACMAN -Sy --noconfirm >>/tmp/kian-pacman-sy.log 2>&1 || true
+        timeout 300 $PACMAN -S --noconfirm tree >>/tmp/kian-pacman-sy.log 2>&1 || true
+    fi
+    if command -v tree >/dev/null 2>&1; then
         ok "pacman: real package install succeeded (tree $(tree --version | head -1 | grep -o '[0-9.]*$'))"
     else
         netbad "pacman: package install failed (log follows)"
@@ -188,9 +196,9 @@ fi
 # 8c. kian-install regression tripwires (real-hardware install failures).
 command -v genfstab >/dev/null 2>&1 \
     && ok "kian-install: genfstab available (arch-install-scripts)" || bad "kian-install: genfstab missing"
-grep -qF "grep -q '^/'" /usr/local/bin/kian-install 2>/dev/null \
-    && bad "kian-install: the broken '^/' fstab check is back — it rejects genfstab -U output and kills every install" \
-    || ok "kian-install: broken '^/' fstab check is gone"
+grep -qE "^[[:space:]]*grep -q .\^/." /usr/local/bin/kian-install 2>/dev/null \
+    && bad "kian-install: the broken leading-slash fstab check is back — it rejects genfstab -U output and kills every install" \
+    || ok "kian-install: broken leading-slash fstab check is gone"
 grep -qF '$2 == "/"' /usr/local/bin/kian-install 2>/dev/null \
     && ok "kian-install: fstab root-entry check uses the second-field rule" \
     || bad "kian-install: fstab root-entry check missing"
@@ -200,9 +208,12 @@ printf '# /dev/vda2\nUUID=1111-AAAA / ext4 rw,relatime 0 1\nUUID=2222-BBBB /efi 
 awk '$2 == "/" {found=1} END {exit !found}' /tmp/kian-fstab-test 2>/dev/null \
     && ok "kian-install: fstab check accepts real genfstab -U output" \
     || bad "kian-install: fstab check REJECTS genfstab -U output (the hardware bug is back)"
-grep -qF "[ -f /usr/share/kian/os-release ]" /etc/pacman.d/hooks/kian-os-release.hook 2>/dev/null \
-    && ok "branding: os-release hook guards a missing source (pacstrap-target safe)" \
-    || bad "branding: os-release hook lacks the missing-source guard"
+grep -qF "Exec = /usr/bin/install -m 0644 /usr/share/kian/os-release /usr/lib/os-release" /etc/pacman.d/hooks/kian-os-release.hook 2>/dev/null \
+    && ok "branding: os-release hook Exec is the plain known-good install" \
+    || bad "branding: os-release hook Exec changed (plain install required — shell syntax is exec'd WITHOUT a shell by libalpm and breaks build-time branding)"
+grep -qF "&& /usr/bin/install" /etc/pacman.d/hooks/kian-os-release.hook 2>/dev/null \
+    && bad "branding: os-release hook Exec contains shell operators (run 43484412717 shipped plain-Arch identity because of that)" \
+    || ok "branding: os-release hook Exec has no shell operators (safe for libalpm direct exec)"
 PERSIST_SHIPPED=0
 # The boot config lives on the ISO filesystem. /run/archiso/bootmnt is only
 # still mounted when copytoram did NOT kick in (it copies the airootfs to RAM

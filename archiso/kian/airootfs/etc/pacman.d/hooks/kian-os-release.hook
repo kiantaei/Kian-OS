@@ -9,13 +9,20 @@
 # mkarchiso then appends IMAGE_ID/IMAGE_VERSION through the /etc/os-release
 # symlink.
 #
-# MISSING-SOURCE GUARD: this hook also fires inside a pacstrap TARGET where
-# /usr/share/kian does not exist yet (kian-install's `pacstrap -K` runs the
-# host's hook — seen as "install: cannot stat '/usr/share/kian/os-release'"
-# on real hardware). In that context the branding is applied AFTERWARD by
-# kian-apply with the live root's source, so the hook must exit cleanly and
-# quietly instead of erroring. In the live session and the installed system
-# the source DOES exist and the hook works as intended.
+# WHERE THE SOURCE COMES FROM: at ISO BUILD time mkarchiso overlays the
+# profile airootfs (which contains /usr/share/kian/os-release) BEFORE
+# pacstrap runs, so the hook finds its source inside the build target. When
+# kian-install runs pacstrap on a real install, the host's hook is picked up
+# by the target too — kian-install therefore pre-seeds
+# $MOUNT/usr/share/kian/os-release before pacstrap so the hook succeeds
+# quietly there as well.
+#
+# IMPORTANT: Exec MUST stay this single plain command. libalpm exec's the
+# Exec string DIRECTLY (no shell), so shell syntax here (`[ ... ] && ...`)
+# would break hook execution — run 43484412717 shipped an ISO whose live
+# identity was plain Arch because of exactly that. A missing source can only
+# produce a harmless "cannot stat" warning; the identity is applied AFTERWARD
+# by kian-apply with the live root's source, so no guard is needed here.
 
 [Trigger]
 Operation = Install
@@ -27,4 +34,4 @@ Target = filesystem
 Description = Installing Kian OS identity into /usr/lib/os-release...
 When = PostTransaction
 Depends = coreutils
-Exec = [ -f /usr/share/kian/os-release ] && /usr/bin/install -m 0644 /usr/share/kian/os-release /usr/lib/os-release || true
+Exec = /usr/bin/install -m 0644 /usr/share/kian/os-release /usr/lib/os-release
