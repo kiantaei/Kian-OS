@@ -35,6 +35,10 @@ file_permissions=(
   ["/usr/local/bin/kian-persist"]="0:0:755"
   ["/usr/local/bin/kianinstall"]="0:0:755"
   ["/usr/local/bin/kian-apply"]="0:0:755"
+  # mkarchiso copies airootfs with --no-preserve=mode — every executable MUST
+  # be listed here or it ships as 644 (found by the boot test: the installer
+  # GUI script was present but not executable).
+  ["/usr/local/bin/kian-install-gui"]="0:0:755"
   # Desktop launchers ship executable so xfdesktop never has to ask whether
   # they may run (the per-user GVFS trusted flag is added in-session by
   # /usr/local/bin/kian-trust-desktop).
