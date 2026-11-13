@@ -256,6 +256,12 @@ steps; see [`docs/verification.md`](docs/verification.md). Quick manual pass:
    * **Try Kian OS** — close the window and keep using the live session.
    The welcome window exists only on the live ISO; an installed Kian OS
    never re-opens it.
+   CI proves the installer works: every build drives the real
+   `sudo kian-install` inside QEMU against a 14 GiB virtual disk (through
+   its actual prompts) and then verifies the installed disk offline — the
+   result must be full Kian OS (Kian os-release, wallpaper, xenox, Kian
+   apps, GRUB branding, user `kian`) with a valid `/etc/fstab` root entry,
+   or the build fails.
 
 ### Real persistence in the live session ("not like live")
 

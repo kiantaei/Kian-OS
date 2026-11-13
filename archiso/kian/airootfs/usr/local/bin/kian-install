@@ -393,8 +393,16 @@ if ! pacstrap -K "$MOUNT" "${PKGS[@]}" 2>&1 | tee "$LOG"; then
     die "package installation failed — see $LOG (mirror region choice affects speed; try a closer region)"
 fi
 
-genfstab -U "$MOUNT" >> "$MOUNT/etc/fstab" || die "genfstab failed"
-grep -q '^/' "$MOUNT/etc/fstab" || die "fstab came out empty"
+say "writing /etc/fstab (from the mounted target) ..."
+genfstab -U "$MOUNT" > "$MOUNT/etc/fstab" || die "genfstab failed"
+# genfstab -U writes entry lines that START with "UUID=" (plus '#' comment
+# lines) — no line ever starts with '/'. The old check `grep -q '^/'`
+# therefore matched nothing and killed EVERY completed install with
+# "fstab came out empty" (seen on real hardware). The root entry is the
+# line whose SECOND field is exactly "/":
+awk '$2 == "/" {found=1} END {exit !found}' "$MOUNT/etc/fstab" \
+    || die "fstab came out empty — no root entry for the target ($MOUNT)"
+say "/etc/fstab written: $(grep -vc '^#' "$MOUNT/etc/fstab") entry line(s), root present"
 
 # ---------------------------------------------------------------------------
 # Configure the installed system (timezone, locale, user, bootloader)

@@ -1,14 +1,21 @@
 # Kian OS identity: replace Arch's os-release with the Kian OS one.
 #
-# WHY A HOOK: mkarchiso copies the profile's airootfs overlay into the new
-# root BEFORE pacstrap runs. Overlaying /usr/lib/os-release directly makes
-# pacstrap abort ("filesystem: usr/lib/os-release exists in filesystem"),
-# because that path is owned by the `filesystem` package and is not a pacman
-# backup file (unlike /etc/passwd). This hook applies the Kian identity
-# right after the `filesystem` package is installed, during the same
-# transaction — the standard archiso pattern (see releng's
-# uncomment-mirrors.hook). mkarchiso then appends IMAGE_ID/IMAGE_VERSION
-# through the /etc/os-release symlink.
+# WHY A HOOK: overlaying /usr/lib/os-release directly makes pacstrap abort
+# ("filesystem: usr/lib/os-release exists in filesystem"), because that path
+# is owned by the `filesystem` package and is not a pacman backup file (unlike
+# /etc/passwd). This hook applies the Kian identity right after the
+# `filesystem` package is installed, during the same transaction — the
+# standard archiso pattern (see releng's uncomment-mirrors.hook).
+# mkarchiso then appends IMAGE_ID/IMAGE_VERSION through the /etc/os-release
+# symlink.
+#
+# MISSING-SOURCE GUARD: this hook also fires inside a pacstrap TARGET where
+# /usr/share/kian does not exist yet (kian-install's `pacstrap -K` runs the
+# host's hook — seen as "install: cannot stat '/usr/share/kian/os-release'"
+# on real hardware). In that context the branding is applied AFTERWARD by
+# kian-apply with the live root's source, so the hook must exit cleanly and
+# quietly instead of erroring. In the live session and the installed system
+# the source DOES exist and the hook works as intended.
 
 [Trigger]
 Operation = Install
@@ -20,4 +27,4 @@ Target = filesystem
 Description = Installing Kian OS identity into /usr/lib/os-release...
 When = PostTransaction
 Depends = coreutils
-Exec = /usr/bin/install -m 0644 /usr/share/kian/os-release /usr/lib/os-release
+Exec = [ -f /usr/share/kian/os-release ] && /usr/bin/install -m 0644 /usr/share/kian/os-release /usr/lib/os-release || true

@@ -184,6 +184,25 @@ if [ -x /usr/local/bin/kian-apply ] && bash -n /usr/local/bin/kian-apply 2>/dev/
 else
     bad "branding: kian-apply missing or broken"
 fi
+
+# 8c. kian-install regression tripwires (real-hardware install failures).
+command -v genfstab >/dev/null 2>&1 \
+    && ok "kian-install: genfstab available (arch-install-scripts)" || bad "kian-install: genfstab missing"
+grep -qF "grep -q '^/'" /usr/local/bin/kian-install 2>/dev/null \
+    && bad "kian-install: the broken '^/' fstab check is back — it rejects genfstab -U output and kills every install" \
+    || ok "kian-install: broken '^/' fstab check is gone"
+grep -qF '$2 == "/"' /usr/local/bin/kian-install 2>/dev/null \
+    && ok "kian-install: fstab root-entry check uses the second-field rule" \
+    || bad "kian-install: fstab root-entry check missing"
+# Unit-test that check against REAL genfstab -U style output (the exact case
+# that failed on hardware: UUID= entries + '#' comments, no line starts with /).
+printf '# /dev/vda2\nUUID=1111-AAAA / ext4 rw,relatime 0 1\nUUID=2222-BBBB /efi vfat rw,umask=0077 0 2\n' >/tmp/kian-fstab-test
+awk '$2 == "/" {found=1} END {exit !found}' /tmp/kian-fstab-test 2>/dev/null \
+    && ok "kian-install: fstab check accepts real genfstab -U output" \
+    || bad "kian-install: fstab check REJECTS genfstab -U output (the hardware bug is back)"
+grep -qF "[ -f /usr/share/kian/os-release ]" /etc/pacman.d/hooks/kian-os-release.hook 2>/dev/null \
+    && ok "branding: os-release hook guards a missing source (pacstrap-target safe)" \
+    || bad "branding: os-release hook lacks the missing-source guard"
 PERSIST_SHIPPED=0
 # The boot config lives on the ISO filesystem. /run/archiso/bootmnt is only
 # still mounted when copytoram did NOT kick in (it copies the airootfs to RAM

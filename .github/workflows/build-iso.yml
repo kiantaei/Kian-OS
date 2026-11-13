@@ -45,6 +45,7 @@ jobs:
           bash -n archiso/kian/profiledef.sh
           bash -n build.sh
           bash -n scripts/ci-boot-test.sh
+          bash -n scripts/ci-install-test.sh
           bash -n archiso/kian/airootfs/usr/local/bin/kian-setup
           bash -n archiso/kian/airootfs/usr/local/bin/kian-install
           bash -n archiso/kian/airootfs/usr/local/bin/kian-persist
@@ -85,9 +86,9 @@ jobs:
           sha256sum kian-os-*.iso > kian-os-0.4.0-x86_64.iso.sha256
           cat kian-os-0.4.0-x86_64.iso.sha256
 
-      # The ISO is published even if the GUI boot test fails, so the artifact
-      # is never lost; the run is then marked failed by the final gate below
-      # and the release notes state the boot-test outcome honestly.
+      # The ISO is published even if a test fails, so the artifact is never
+      # lost; failed tests are then marked by the final gates below and the
+      # release notes state the outcomes honestly.
       - name: Real QEMU boot test (BIOS + serial login + desktop)
         id: boottest
         continue-on-error: true
@@ -100,6 +101,26 @@ jobs:
           echo "----- serial transcript (last 80 lines) -----"
           tail -80 build/test/kian-serial-transcript.txt || true
 
+      # End-to-end proof that the installer really works: drives the REAL
+      # `sudo kian-install` in QEMU against a 14 GiB virtual disk through its
+      # actual prompts, then loop-mounts the installed image and verifies the
+      # full Kian OS identity (os-release, fstab root entry, xenox, wallpaper,
+      # Kian apps, GRUB branding, user kian). This is the test that catches
+      # the "fstab came out empty" class of bugs before they reach you.
+      - name: Real disk-install test (kian-install end-to-end in QEMU)
+        id: installtest
+        continue-on-error: true
+        timeout-minutes: 90
+        run: |
+          truncate -s 14G build/install-test-disk.img
+          bash scripts/ci-install-test.sh \
+            build/out/kian-os-0.4.0-x86_64.iso \
+            build/install-test-disk.img \
+            build/install-test
+          cat build/install-test/install-test-summary.txt
+          echo "----- installer transcript (last 60 lines) -----"
+          tail -60 build/install-test/kian-install-transcript.txt || true
+
       - name: Upload build artifacts (always, for debugging)
         if: always()
         uses: actions/upload-artifact@v4
@@ -109,6 +130,7 @@ jobs:
             build/out/*.iso
             build/out/*.sha256
             build/test/*
+            build/install-test/*
           if-no-files-found: warn
 
       - name: Publish rolling release (main)
@@ -126,6 +148,7 @@ jobs:
             - commit: ${{ github.sha }}
             - built with archiso in an archlinux:base-devel container
             - QEMU boot test: **${{ steps.boottest.outcome }}**
+            - disk-install test (real kian-install run in QEMU): **${{ steps.installtest.outcome }}**
 
             Boot it in VMware (primary target), QEMU or VirtualBox.
             Live login: `kian` / `kian`.
@@ -150,14 +173,15 @@ jobs:
             the verification checklist.
 
             - QEMU boot test: **${{ steps.boottest.outcome }}**
+            - disk-install test (real kian-install run in QEMU): **${{ steps.installtest.outcome }}**
           files: |
             build/out/*.iso
             build/out/*.sha256
 
-      # Keep the run honest: the ISO is already uploaded, but a failed boot
-      # test must still turn the workflow red.
-      - name: Fail the run if the boot test failed
-        if: steps.boottest.outcome == 'failure'
+      # Keep the run honest: the ISO is already uploaded, but failed tests
+      # must still turn the workflow red.
+      - name: Fail the run if a test failed
+        if: steps.boottest.outcome == 'failure' || steps.installtest.outcome == 'failure'
         run: |
-          echo "::error::QEMU boot test failed. The ISO was uploaded but is marked as failing in the release notes."
+          echo "::error::QEMU boot test: ${{ steps.boottest.outcome }}; disk-install test: ${{ steps.installtest.outcome }}. The ISO was uploaded but is marked as failing in the release notes."
           exit 1

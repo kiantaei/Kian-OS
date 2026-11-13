@@ -55,6 +55,26 @@ archive/legacy-standalone/   pre-0.4.0 from-scratch kernel/GUI (frozen, not buil
   (`GRUB_DISTRIBUTOR="Kian OS"`), then `kian-apply -y /mnt`. Needs
   `arch-install-scripts` + `parted` (in packages.x86_64). `kianinstall` (the
   archinstall fork, vendored at /opt/kianinstall) stays as the advanced option.
+- kian-install real-hardware bugs (fixed 2026-11-13, found on the user's own
+  machine): (1) the fstab sanity check was `grep -q '^/'` but `genfstab -U`
+  writes UUID= entry lines that never start with '/' -> EVERY install died
+  with "fstab came out empty" after pacstrap; now the check is
+  `awk '$2 == "/" {found=1} END {exit !found}'` and genfstab writes with >
+  not >>. (2) kian-os-release.hook ran unguarded inside the pacstrap TARGET
+  ("install: cannot stat /usr/share/kian/os-release") — Exec now begins with
+  `[ -f ... ] && install ... || true`; branding still comes from kian-apply
+  with the live root's source. REGRESSION TRIPWIRES in verify-commands.sh
+  section 8c (broken-check grep, awk rule, unit test against genfstab -U
+  output, hook guard grep).
+- CI now runs a REAL end-to-end disk install: scripts/ci-install-test.sh
+  (workflow step "Real disk-install test") boots the ISO with a 14G virtio
+  disk, drives `sudo kian-install` via serial expect (region 20 = bundled
+  mirrors, timezone 2 = UTC, Enter at countdown, expect "Kian OS is installed
+  on /dev/vda", timeout 3600), then losetup-mounts the image on the runner
+  and checks 19 markers of the installed system (Kian os-release, fstab root
+  entry, xenox, wallpaper, >=5 Kian launchers, GRUB branding, kernel,
+  hostname kian-os, kian uid 1000, lightdm, hook guard, sudoers, motd).
+  ANY failure fails the run even though the ISO is still published.
 - Installer GUI (0.4.0, per user request): `kian-install-gui` (yad, banner at
   /usr/share/kian/installer-banner.png) AUTO-OPENS on the live desktop via
   /etc/xdg/autostart/kian-installer-welcome.desktop. Buttons: Install Kian OS
