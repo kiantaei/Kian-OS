@@ -1,5 +1,0 @@
-# Kian OS live session: the live user installs and persists without
-# a password prompt, exactly like Ubuntu's own live images (casper does
-# the same). This file is REMOVED from the installed system by
-# kian-cleanup-live-only (calamares shellprocess + kian-install).
-kian ALL=(ALL) NOPASSWD: ALL

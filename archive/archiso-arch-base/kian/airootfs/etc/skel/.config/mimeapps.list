@@ -1,5 +1,0 @@
-[Default Applications]
-x-scheme-handler/http=kian-xenox.desktop
-x-scheme-handler/https=kian-xenox.desktop
-text/html=kian-xenox.desktop
-application/xhtml+xml=kian-xenox.desktop

@@ -14,17 +14,3 @@ limine/
 vendor/
 # build working dir (limine clone + objects)
 build/
-
-# live-build generated files (created by ./auto/config + lb build)
-live/config/binary
-live/config/bootstrap
-live/config/chroot
-live/config/common
-live/config/source
-live/chroot/
-live/cache/
-live/local/
-live/binary/
-live/.build/
-live/live-build.log
-live/stamp*

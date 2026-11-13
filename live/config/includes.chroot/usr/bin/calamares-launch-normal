@@ -1,5 +1,0 @@
-#!/bin/bash
-# Kian OS — launch the Calamares installer like Ubuntu's flavors do:
-# as root, keeping the X environment (sudo -E), with live-user passwordless
-# sudo (removed from the installed system by kian-cleanup-live-only).
-exec sudo -E calamares "$@"

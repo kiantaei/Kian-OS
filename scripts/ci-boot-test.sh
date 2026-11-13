@@ -1,7 +1,7 @@
 #!/bin/bash
 # Kian OS CI boot test.
 # Boots the ISO in QEMU (no KVM — pure TCG), waits for the serial login
-# prompt, logs in as kian/live (live-config default), runs real verification commands, captures
+# prompt, logs in as kian/kian, runs real verification commands, captures
 # desktop screenshots through the QEMU monitor and powers off.
 #
 # Usage: scripts/ci-boot-test.sh <path-to.iso> <output-dir>
@@ -31,7 +31,7 @@ expect <<'EOT' || STATUS=1
     set timeout 900
     log_file -a /tmp/kian-serial-transcript.txt
     spawn qemu-system-x86_64 \
-        -m 2048 -smp 2 \
+        -m 2048 -smp 4 \
         -cdrom $env(ISO) -boot d \
         -display none -serial mon:stdio -no-reboot \
         -monitor unix:/tmp/kian-qemu-mon.sock,server,nowait
@@ -49,8 +49,7 @@ expect <<'EOT' || STATUS=1
         -re "Password:" {}
         timeout { puts "LOGIN_FAIL: no password prompt"; exit 12 }
     }
-    # live session default password (live-config user-setup: "live")
-    send "live\r"
+    send "kian\r"
     # Match either the session-start marker or the (color-escaped) prompt;
     # "kian@kian-os" appears in both. Under TCG the first session setup can
     # stall while X/XFCE autostart saturates the CPU, so allow plenty of time.
@@ -67,17 +66,12 @@ expect <<'EOT' || STATUS=1
     }
     set timeout 900
 
-    # cache sudo credentials for the verify script (same tty => timestamp valid).
-    # sudo -S reads the password from STDIN (the echo pipe) — an interactive
-    # 'sudo -v' would sit waiting on the tty with its prompt hidden by 2>/dev/null,
-    # and every later expect send would be eaten as a wrong password.
-    set timeout 120
-    send "echo live | sudo -S -v 2>/dev/null; echo SUDO_CACHED\r"
+    # cache sudo credentials for the verify script (same tty => timestamp valid)
+    send "echo kian | sudo -S -v 2>/dev/null; echo SUDO_CACHED\r"
     expect {
         "SUDO_CACHED" {}
-        timeout { puts "SUDO_CACHE_TIMEOUT (verify will run without root apt)" }
+        timeout { puts "SUDO_CACHE_TIMEOUT (verify will run without root pacman)" }
     }
-    set timeout 900
 
     # --- 3. desktop: wait for lightdm + XFCE (slow under TCG), then shoot ---
     send "for i in \$(seq 1 60); do systemctl is-active lightdm >/dev/null 2>&1 && pgrep -x xfce4-session >/dev/null 2>&1 && break; sleep 10; done; echo DESKTOP_WAIT_DONE\r"
@@ -107,7 +101,7 @@ expect <<'EOT' || STATUS=1
             puts "\n=== VERIFY_COMMANDS_EXIT: $expect_out(1,string) ==="
             if {$expect_out(1,string) != 0} {
                 # dump honest diagnostics into the transcript before failing
-                send "echo DIAG_"BEGIN"; journalctl -u lightdm --no-pager -n 40 2>&1 | tail -40; systemctl --no-pager status lightdm 2>&1 | head -12; loginctl list-sessions --no-pager 2>&1; ps -eo comm,args | grep -E 'xfce|lightdm|Xorg|dbus' | grep -v grep; timedatectl 2>&1 | head -8; test -d /run/live/medium && echo LIVE_MEDIUM_OK; echo DIAG_"END"\r"
+                send "echo DIAG_"BEGIN"; journalctl -u lightdm --no-pager -n 40 2>&1 | tail -40; systemctl --no-pager status lightdm 2>&1 | head -12; loginctl list-sessions --no-pager 2>&1; ps -eo comm,args | grep -E 'xfce|lightdm|Xorg|dbus' | grep -v grep; timedatectl 2>&1 | head -8; tail -25 /tmp/kian-pacman-sy.log 2>/dev/null; echo DIAG_"END"\r"
                 expect {
                     "DIAG_END" {}
                     timeout {}
@@ -128,7 +122,7 @@ expect <<'EOT' || STATUS=1
     }
 
     # --- 6. honest shutdown (item 11 of the checklist) ---
-    send "sudo systemctl poweroff 2>&1; echo POWEROFF_SENT\r"
+    send "echo kian | sudo -S systemctl poweroff 2>&1; echo POWEROFF_SENT\r"
     expect {
         "POWEROFF_SENT" {}
         timeout {}

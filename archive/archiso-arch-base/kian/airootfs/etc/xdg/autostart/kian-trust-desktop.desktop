@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Kian OS desktop launcher trust
-Comment=Mark the icons on the Kian desktop as trusted so they launch on first click
-Exec=/usr/local/bin/kian-trust-desktop
-Terminal=false
-NoDisplay=true
