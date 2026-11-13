@@ -101,7 +101,9 @@ expect <<'EOT' || STATUS=1
             puts "\n=== VERIFY_COMMANDS_EXIT: $expect_out(1,string) ==="
             if {$expect_out(1,string) != 0} {
                 # dump honest diagnostics into the transcript before failing
-                send "echo DIAG_"BEGIN"; journalctl -u lightdm --no-pager -n 40 2>&1 | tail -40; systemctl --no-pager status lightdm 2>&1 | head -12; loginctl list-sessions --no-pager 2>&1; ps -eo comm,args | grep -E 'xfce|lightdm|Xorg|dbus' | grep -v grep; timedatectl 2>&1 | head -8; tail -25 /tmp/kian-pacman-sy.log 2>/dev/null; echo DIAG_"END"\r"
+                # (NOTE: no nested double quotes inside the send string —
+                # Tcl treats "DIAG_"BEGIN"" as two strings and aborts parsing)
+                send "echo DIAG_BEGIN; journalctl -u lightdm --no-pager -n 40 2>&1 | tail -40; systemctl --no-pager status lightdm 2>&1 | head -12; loginctl list-sessions --no-pager 2>&1; ps -eo comm,args | grep -E 'xfce|lightdm|Xorg|dbus' | grep -v grep; timedatectl 2>&1 | head -8; tail -25 /tmp/kian-pacman-sy.log 2>/dev/null; ls /run/archiso/bootmnt /run/archiso/bootmnt/arch 2>&1; echo DIAG_END\r"
                 expect {
                     "DIAG_END" {}
                     timeout {}

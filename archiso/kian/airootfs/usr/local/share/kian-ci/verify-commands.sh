@@ -160,23 +160,35 @@ PERSIST_SHIPPED=0
 # still mounted when copytoram did NOT kick in (it copies the airootfs to RAM
 # on machines with plenty of memory and unmounts the medium) — so prefer the
 # ISO device directly, via the archisolabel from the running cmdline.
+# mkarchiso layout: syslinux.cfg at ISO ROOT /boot/syslinux/syslinux.cfg and
+# grub.cfg at ISO ROOT /boot/grub/grub.cfg (verified in mkarchiso source:
+# isofs_dir}/boot/syslinux + isofs_dir}/boot/grub) — NOT under /arch/.
+# Nested $DIR/... and legacy /syslinux/ globs kept as fallbacks.
 ISO_LABEL=""
 for o in $(cat /proc/cmdline 2>/dev/null); do
     case "$o" in archisolabel=*) ISO_LABEL="${o#archisolabel=}" ;; esac
 done
 ISO_CHECK_DIR="$(mktemp -d /tmp/kian-iso-check.XXXXXX)"
 ISO_SRC="/dev/disk/by-label/${ISO_LABEL:-KIAN_OS_040}"
-if sudo -n mount -o ro "$ISO_SRC" "$ISO_CHECK_DIR" 2>/dev/null; then
-    for cfg in "$ISO_CHECK_DIR"/*/boot/syslinux/syslinux.cfg "$ISO_CHECK_DIR"/*/boot/grub/grub.cfg; do
+check_cfgs() {
+    for cfg in \
+        "$1/boot/syslinux/syslinux.cfg" "$1/boot/grub/grub.cfg" \
+        "$1/syslinux/syslinux.cfg" \
+        "$1"/*/boot/syslinux/syslinux.cfg "$1"/*/boot/grub/grub.cfg \
+        "$1"/*/syslinux/syslinux.cfg
+    do
         [ -f "$cfg" ] || continue
+        echo "EVIDENCE: boot cfg on medium: ${cfg#"$1"}"
         grep -q "cow_label=KIANPERSIST" "$cfg" && PERSIST_SHIPPED=1
     done
+}
+if sudo -n mount -o ro "$ISO_SRC" "$ISO_CHECK_DIR" 2>/dev/null; then
+    check_cfgs "$ISO_CHECK_DIR"
     sudo -n umount "$ISO_CHECK_DIR" 2>/dev/null || true
 elif [ -d /run/archiso/bootmnt ]; then
-    for cfg in /run/archiso/bootmnt/*/boot/syslinux/syslinux.cfg /run/archiso/bootmnt/*/boot/grub/grub.cfg; do
-        [ -f "$cfg" ] || continue
-        grep -q "cow_label=KIANPERSIST" "$cfg" && PERSIST_SHIPPED=1
-    done
+    check_cfgs /run/archiso/bootmnt
+else
+    echo "EVIDENCE: ISO device ${ISO_SRC} not mountable and /run/archiso/bootmnt missing"
 fi
 rmdir "$ISO_CHECK_DIR" 2>/dev/null || true
 [ "$PERSIST_SHIPPED" = "1" ] && ok "persist: persistent boot entry shipped (cow_label=KIANPERSIST)" || bad "persist: persistent boot entry missing in boot config"
