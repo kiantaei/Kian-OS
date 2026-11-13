@@ -21,6 +21,12 @@
 # exist and this script exits (it says so in a dialog instead of installing
 # anything over the running machine).
 #
+# STARTED AS ROOT: a GTK window can only open on the live session's display,
+# and root has neither its DISPLAY nor its X cookie — yad would exit at once.
+# The script therefore re-runs itself as the desktop user with that session's
+# real environment. The buttons escalate with sudo themselves, so the GUI
+# never needs root.
+#
 # Honesty policy: nothing is installed unless the user clicks a button and
 # confirms inside the installer; the GUI only launches the real installers.
 
@@ -29,8 +35,64 @@ set -uo pipefail
 BANNER=/usr/share/kian/installer-banner.png
 # /run is root-owned; the live user needs a writable lock location.
 LOCK="${XDG_RUNTIME_DIR:-/tmp}/kian-install-gui.lock"
+YAD_ERR=""
 
 say() { printf '\033[1;34m[kian-install-gui]\033[0m %s\n' "$*"; }
+
+cleanup() { [ -n "$YAD_ERR" ] && rm -f "$YAD_ERR" 2>/dev/null; }
+trap cleanup EXIT
+
+# --- run inside the desktop user's session ----------------------------------
+# Prints "DISPLAY|XAUTHORITY" for the running XFCE session of $1.
+session_env() {
+    local user="$1" pid env_out disp xauth
+    for pid in $(pgrep -u "$user" -x xfce4-session 2>/dev/null) \
+               $(pgrep -u "$user" -x xfwm4 2>/dev/null) \
+               $(pgrep -u "$user" -x xfdesktop 2>/dev/null); do
+        [ -r "/proc/$pid/environ" ] || continue
+        env_out="$(tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null)"
+        disp="$(printf '%s\n' "$env_out" | sed -n 's/^DISPLAY=//p' | head -n1)"
+        [ -n "$disp" ] || continue
+        xauth="$(printf '%s\n' "$env_out" | sed -n 's/^XAUTHORITY=//p' | head -n1)"
+        printf '%s|%s\n' "$disp" "$xauth"
+        return 0
+    done
+    return 1
+}
+
+if [ "$(id -u)" -eq 0 ] && command -v runuser >/dev/null 2>&1; then
+    DESKTOP_USER="${KIAN_DESKTOP_USER:-kian}"
+    if id "$DESKTOP_USER" >/dev/null 2>&1; then
+        sess_disp=""
+        sess_xauth=""
+        IFS='|' read -r sess_disp sess_xauth <<EOF
+$(session_env "$DESKTOP_USER" || true)
+EOF
+        sess_disp="${sess_disp:-${DISPLAY:-:0}}"
+        # LightDM keeps the session cookie at /run/lightdm/root/:0 (root-only).
+        # Copy it somewhere the desktop user can read it.
+        if [ -n "$sess_xauth" ] && [ -r "$sess_xauth" ]; then
+            cookie="/run/kian-install-gui.xauth"
+            if cp -f "$sess_xauth" "$cookie" 2>/dev/null; then
+                chown "$DESKTOP_USER" "$cookie" 2>/dev/null || true
+                chmod 600 "$cookie" 2>/dev/null || true
+                sess_xauth="$cookie"
+            fi
+        elif [ -f "/home/$DESKTOP_USER/.Xauthority" ]; then
+            sess_xauth="/home/$DESKTOP_USER/.Xauthority"
+        fi
+        runtime="/run/user/$(id -u "$DESKTOP_USER")"
+        [ -d "$runtime" ] || runtime="${XDG_RUNTIME_DIR:-/tmp}"
+        say "running as root — reopening the installer window as $DESKTOP_USER on $sess_disp"
+        exec runuser -u "$DESKTOP_USER" -- env \
+            DISPLAY="$sess_disp" \
+            ${sess_xauth:+XAUTHORITY="$sess_xauth"} \
+            XDG_RUNTIME_DIR="$runtime" \
+            HOME="/home/$DESKTOP_USER" \
+            USER="$DESKTOP_USER" LOGNAME="$DESKTOP_USER" \
+            /usr/local/bin/kian-install-gui "$@"
+    fi
+fi
 
 # --- guards -----------------------------------------------------------------
 # Already running? (autostart + manual menu launch must not stack windows)
@@ -42,6 +104,7 @@ flock -n 9 2>/dev/null || exit 0
 # Needs a graphical session.
 if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
     say "no graphical session — not showing the installer GUI"
+    say "use the text installer instead:  sudo kian-install"
     exit 0
 fi
 
@@ -64,6 +127,7 @@ fi
 # --- the welcome window ------------------------------------------------------
 # Button exit codes (yad): 0 = Install Kian OS, 2 = simple installer,
 # 1 = Try Kian OS / window closed (252 = closed via WM too).
+YAD_ERR="$(mktemp /tmp/kian-gui.XXXXXX 2>/dev/null || echo /tmp/kian-gui.err)"
 ret=0
 yad --title="Kian OS 0.4.0 — Welcome" \
     --window-icon=kian-os-logo \
@@ -73,7 +137,7 @@ yad --title="Kian OS 0.4.0 — Welcome" \
     --button="Install Kian OS!go-up:0" \
     --button="Simple installer!applications-system:2" \
     --button="Try Kian OS!window-close:1" \
-    --width=560 >/dev/null 2>&1
+    --width=560 2>"$YAD_ERR"
 ret=$?
 
 case "$ret" in
@@ -109,7 +173,15 @@ case "$ret" in
             read -r'
         ;;
     *)  # 1 / 252 — Try Kian OS or window closed
-        say "welcome window closed — the live session continues; the installer is in the menu (Kian OS Installer)"
+        if [ -s "$YAD_ERR" ] && grep -qiE 'cannot open display|display|Gtk-(WARNING|CRITICAL)' "$YAD_ERR"; then
+            # The window never appeared: say why instead of pretending the
+            # user closed it.
+            say "the welcome window could not open (yad exit $ret)"
+            sed -n '1,4p' "$YAD_ERR" | sed 's/^/    /'
+            say "run it from the desktop menu (Kian OS Installer) or use the text installer:  sudo kian-install"
+        else
+            say "welcome window closed — the live session continues; the installer is in the menu (Kian OS Installer)"
+        fi
         ;;
 esac
 

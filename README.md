@@ -191,6 +191,18 @@ The result is Kian OS **on an Arch base**: Arch packages and updates still come
 from the official repositories, while identity, branding and Kian's own files
 come from the ISO.
 
+### First boot of the installed system
+
+1. Power off the VM/machine, detach the ISO (VMware: *VM → Settings → CD/DVD →
+   Use physical drive / disconnect*), then power on.
+2. GRUB shows the **Kian OS** entry (the brand name comes from
+   `GRUB_DISTRIBUTOR`), then LightDM's greeter with the Kian wallpaper.
+3. Log in as `kian` with password `kian` (the simple installer), or with the
+   user/password you created in the kianinstall (archinstall) menu.
+4. If the machine stops at a text login instead of the greeter, log in and run
+   `sudo systemctl enable --now lightdm`, or start the desktop directly with
+   `startxfce4` (a *minimal* install has no desktop — install Xfce first).
+
 ### Installer troubleshooting
 
 The Textual-based archinstall (4.x) can crash with
@@ -210,6 +222,15 @@ What to do:
   key, and
 - if it still crashes, re-run `sudo kian-install`; the live session and the
   target disk are untouched.
+
+**The welcome window closes instantly when started from a root shell.**
+`kian-install-gui` needs the live desktop's `DISPLAY` and its X cookie, which a
+root shell does not have, so `yad` exits at once. The script now re-runs itself
+as the desktop user (with that session's real `DISPLAY`/`XAUTHORITY`) and, if
+the window still cannot open, prints yad's actual error instead of claiming the
+window was closed. On an older ISO the workaround is to start it from the
+desktop menu (**Kian OS Installer**) as `kian`, or to use the text installer
+`sudo kian-install`.
 
 ## Repository layout
 
