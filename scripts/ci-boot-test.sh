@@ -31,7 +31,7 @@ expect <<'EOT' || STATUS=1
     set timeout 900
     log_file -a /tmp/kian-serial-transcript.txt
     spawn qemu-system-x86_64 \
-        -m 2048 -smp 4 \
+        -m 2048 -smp 2 \
         -cdrom $env(ISO) -boot d \
         -display none -serial mon:stdio -no-reboot \
         -monitor unix:/tmp/kian-qemu-mon.sock,server,nowait
@@ -67,12 +67,17 @@ expect <<'EOT' || STATUS=1
     }
     set timeout 900
 
-    # cache sudo credentials for the verify script (same tty => timestamp valid)
-    send "sudo -v 2>/dev/null; echo SUDO_CACHED\r"
+    # cache sudo credentials for the verify script (same tty => timestamp valid).
+    # sudo -S reads the password from STDIN (the echo pipe) — an interactive
+    # 'sudo -v' would sit waiting on the tty with its prompt hidden by 2>/dev/null,
+    # and every later expect send would be eaten as a wrong password.
+    set timeout 120
+    send "echo live | sudo -S -v 2>/dev/null; echo SUDO_CACHED\r"
     expect {
         "SUDO_CACHED" {}
         timeout { puts "SUDO_CACHE_TIMEOUT (verify will run without root apt)" }
     }
+    set timeout 900
 
     # --- 3. desktop: wait for lightdm + XFCE (slow under TCG), then shoot ---
     send "for i in \$(seq 1 60); do systemctl is-active lightdm >/dev/null 2>&1 && pgrep -x xfce4-session >/dev/null 2>&1 && break; sleep 10; done; echo DESKTOP_WAIT_DONE\r"
