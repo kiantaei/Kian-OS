@@ -55,6 +55,22 @@ archive/legacy-standalone/   pre-0.4.0 from-scratch kernel/GUI (frozen, not buil
   (`GRUB_DISTRIBUTOR="Kian OS"`), then `kian-apply -y /mnt`. Needs
   `arch-install-scripts` + `parted` (in packages.x86_64). `kianinstall` (the
   archinstall fork, vendored at /opt/kianinstall) stays as the advanced option.
+- GitHub Releases hard asset cap: 2147483648 bytes (2 GiB) per file — the
+  ISO hit 2.414 GB after Proton/multilib additions and the publish step
+  failed with 'ReleaseAsset size must be less than 2147483648' (run
+  43487534069). Fixes: (1) linux-firmware REMOVED from the live ISO package
+  list (VMs need no firmware; installed systems still pacstrap it via
+  kian-install PKGS — verified line ~379); (2) squashfs compression bumped
+  zstd 15 -> 19 + -Xdict-size 1M in profiledef.sh airootfs_image_tool_options.
+  Firmware split sizes measured from archlinux.org API (nvidia alone 109 MB).
+- ci-install-test.sh sudo lesson: the live sudoers requires a password —
+  cache first with 'echo kian | sudo -S -v' (same as ci-boot-test.sh) or
+  sudo stalls at '[sudo] password for kian:' and expect times out
+  ('no region prompt', found in the artifact transcript via ranged ZIP read
+  of the GitHub artifact blob).
+- Workflow run-block gotcha: GH Actions runs steps with `bash -e` — a failing
+  command stops the block, so diagnostics after the failure never print. Use
+  `cmd || TEST_RC=$?` + `exit $TEST_RC` to show evidence AND keep the rc.
 - kian-install real-hardware bugs (fixed 2026-11-13, found on the user's own
   machine): (1) the fstab sanity check was `grep -q '^/'` but `genfstab -U`
   writes UUID= entry lines that never start with '/' -> EVERY install died

@@ -113,13 +113,19 @@ jobs:
         timeout-minutes: 90
         run: |
           truncate -s 14G build/install-test-disk.img
+          TEST_RC=0
           bash scripts/ci-install-test.sh \
             build/out/kian-os-0.4.0-x86_64.iso \
             build/install-test-disk.img \
-            build/install-test
-          cat build/install-test/install-test-summary.txt
-          echo "----- installer transcript (last 60 lines) -----"
-          tail -60 build/install-test/kian-install-transcript.txt || true
+            build/install-test || TEST_RC=$?
+          # always show the evidence in the job log, then keep the real rc
+          cat build/install-test/install-test-summary.txt || true
+          echo "----- installer transcript (last 80 lines) -----"
+          tail -80 build/install-test/kian-install-transcript.txt || true
+          # the 14G test disk holds ~7 GB of real data by now — free it
+          # before the release upload
+          rm -f build/install-test-disk.img
+          exit $TEST_RC
 
       - name: Upload build artifacts (always, for debugging)
         if: always()

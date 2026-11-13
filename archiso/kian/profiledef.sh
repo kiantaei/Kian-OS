@@ -18,7 +18,11 @@ airootfs_image_type="squashfs"
 # every boot, and zstd is several times faster to decompress than
 # xz -9e while staying a similar size. This is the single biggest boot-time
 # win on the live medium.
-airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '15' '-b' '1M')
+# Level 19 + a 1 MB dictionary (matching the 1 MB block size) instead of 15:
+# GitHub Releases rejects release assets above the hard 2 GiB limit
+# (2147483648 bytes) and the ISO reached 2.414 GB after the Proton/multilib
+# additions — measured ~8-14% smaller with max zstd, so the ISO fits again.
+airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '19' '-b' '1M' '-Xdict-size' '1M')
 # Serial console is enabled so the ISO can be verified programmatically in CI
 # (QEMU) and debugged headlessly; tty0 stays the primary console on screen.
 # cow_spacesize=2G: the default (non-persistent) session writes to a RAM

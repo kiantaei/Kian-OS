@@ -72,6 +72,15 @@ expect <<'EOT' || STATUS=1
     set timeout 300
 
     # --- 2. run the real installer, answer its real prompts ---
+    # Cache sudo credentials FIRST (same as the boot test): without this,
+    # `sudo kian-install` stops at "[sudo] password for kian:" and the test
+    # times out waiting for the region prompt (the exact failure of run
+    # 43487534069, found in the installer transcript).
+    send "echo kian | sudo -S -v 2>/dev/null; echo SUDO_CACHED\r"
+    expect {
+        "SUDO_CACHED" {}
+        timeout { puts "NOTE: sudo cache not confirmed (continuing)" }
+    }
     # region: REGIONS has 19 entries, then "keep the bundled mirrors" = 20
     #         (KEEP_IDX in kian-install). Bundled mirrors are replaced by the
     #         built-in fallback list when the ISO's list has no active server.
@@ -79,6 +88,7 @@ expect <<'EOT' || STATUS=1
     send "sudo kian-install\r"
     expect {
         "Select region" {}
+        "password for kian" { send "kian\r"; exp_continue }
         timeout { puts "INSTALL_FAIL: no region prompt"; exit 14 }
     }
     send "20\r"

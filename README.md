@@ -493,6 +493,12 @@ Kian-OS/
 - Xenox is a Chromium profile, not a custom engine — the custom UI remains a
   future idea (see ROADMAP).
 - ISO size is large (~2 GB) because a real browser, full toolchain and
-  firmware are bundled.
+  fonts are bundled. GitHub Releases rejects assets above the hard 2 GiB
+  cap, so the live ISO ships WITHOUT the ~426 MB `linux-firmware` blob
+  package: virtual machines (VMware primary target, QEMU CI) use no device
+  firmware, and the **installed system still gets full hardware support**
+  because `kian-install` pacstraps the real `linux-firmware` from the
+  mirrors at install time. On real bare metal the live session may lack
+  WiFi or GPU acceleration until the OS is installed.
 - `neofetch` is fastfetch under the hood (neofetch no longer exists in Arch
   repos) — the command and the familiar look are preserved.

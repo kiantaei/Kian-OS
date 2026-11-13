@@ -10,7 +10,15 @@
 base
 base-devel
 linux
-linux-firmware
+# linux-firmware is deliberately NOT on the live ISO: ~426 MB compressed
+# (~439 MB installed) of hardware firmware blobs, and virtual-machine devices
+# (VMware is the primary target, QEMU the CI runner) use none of them. The
+# INSTALLED system keeps full hardware support because kian-install's package
+# list (line ~379) pacstraps the real `linux-firmware` from the mirrors at
+# install time. This keeps the ISO under GitHub Releases' hard 2 GiB asset
+# cap (a release upload is REJECTED above 2147483648 bytes). Live-session
+# trade-off on real bare metal: WiFi (iwlwifi/ath9k/...) and some GPU
+# acceleration (amdgpu/nouveau) may not work until the OS is installed.
 intel-ucode
 amd-ucode
 mkinitcpio
