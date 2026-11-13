@@ -23,8 +23,9 @@
 #   If umu-launcher is not installed but a Proton directory exists, the script
 #   falls back to Proton's own `proton run` with STEAM_COMPAT_* variables.
 #
-#   Nothing is downloaded and no prefix is created until you actually run a
-#   program with this command.
+#   Double-clicking a .exe in the file manager does the same thing: the
+#   "Open with Proton" desktop entry is the default handler for Windows
+#   executables (/etc/xdg/mimeapps.list → proton-exe.desktop).
 
 set -uo pipefail
 
@@ -106,6 +107,9 @@ else
     say "no local Proton build found — umu will use UMU-Proton (Proton Experimental based)"
 fi
 say "prefix: $WINEPREFIX"
+
+# Windows programs often expect to be started from their own directory.
+cd "$(dirname "$EXE")" 2>/dev/null || cd "$HOME" || true
 
 # --- run it ----------------------------------------------------------------
 if command -v umu-run >/dev/null 2>&1; then

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Open with Proton
+GenericName=Windows Application
+Comment=Run a Windows .exe program with Proton (umu-launcher; no Steam account needed)
+Exec=/usr/local/bin/proton-exe %f
+TryExec=/usr/local/bin/proton-exe
+Icon=application-x-ms-dos-executable
+Terminal=true
+Categories=System;Utility;
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/x-msdos-program;application/vnd.microsoft.portable-executable;
+StartupNotify=false

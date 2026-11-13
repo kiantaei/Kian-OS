@@ -277,6 +277,43 @@ apply_branding() {
     say "installing Kian applications and desktop entries"
     mkdir -p "$t/usr/share/applications"
     cp -a "$LIVE"/usr/share/applications/kian-*.desktop "$t/usr/share/applications/" 2>/dev/null || true
+    # "Open with Proton": makes double-clicking a .exe run it through Proton.
+    put "$LIVE/usr/share/applications/proton-exe.desktop" "$t/usr/share/applications/proton-exe.desktop" 0644
+    mkdir -p "$t/etc/xdg"
+    if [ ! -f "$t/etc/xdg/mimeapps.list" ]; then
+        cp -f "$LIVE/etc/xdg/mimeapps.list" "$t/etc/xdg/mimeapps.list" 2>/dev/null || true
+    elif ! grep -q 'application/x-ms-dos-executable=proton-exe.desktop' "$t/etc/xdg/mimeapps.list"; then
+        # Keep the system's existing defaults and add only the Proton mapping.
+        # The keys go into the existing [Default Applications] group instead of
+        # a second copy of it (duplicate groups are undefined for some tools).
+        awk '
+            /^\[Default Applications\]\r?$/ && !added {
+                print
+                print "application/x-ms-dos-executable=proton-exe.desktop"
+                print "application/x-msdownload=proton-exe.desktop"
+                print "application/x-msdos-program=proton-exe.desktop"
+                print "application/vnd.microsoft.portable-executable=proton-exe.desktop"
+                added = 1
+                next
+            }
+            { print }
+            END {
+                if (!added) {
+                    print ""
+                    print "[Default Applications]"
+                    print "application/x-ms-dos-executable=proton-exe.desktop"
+                    print "application/x-msdownload=proton-exe.desktop"
+                    print "application/x-msdos-program=proton-exe.desktop"
+                    print "application/vnd.microsoft.portable-executable=proton-exe.desktop"
+                }
+            }
+        ' "$t/etc/xdg/mimeapps.list" >"$t/etc/xdg/mimeapps.list.kian" \
+            && mv -f "$t/etc/xdg/mimeapps.list.kian" "$t/etc/xdg/mimeapps.list" \
+            || warn "could not add the Proton mapping to $t/etc/xdg/mimeapps.list"
+    fi
+    # Refresh the desktop/mime caches in the target so the handler is visible.
+    command -v update-desktop-database >/dev/null 2>&1 \
+        && update-desktop-database -q "$t/usr/share/applications" 2>/dev/null || true
     put "$LIVE/usr/bin/xenox" "$t/usr/bin/xenox" 0755
     put "$LIVE/usr/bin/neofetch" "$t/usr/bin/neofetch" 0755
     put "$LIVE/usr/local/bin/kian-panel-position-fix" "$t/usr/local/bin/kian-panel-position-fix" 0755

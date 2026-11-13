@@ -237,6 +237,14 @@ if [ -x /usr/local/bin/proton-exe ] && bash -n /usr/local/bin/proton-exe 2>/dev/
     grep -q "PROTONPATH" /usr/local/bin/proton-exe \
         && ok "proton: proton-exe selects a Proton build (Experimental / UMU-Proton)" \
         || bad "proton: proton-exe does not reference PROTONPATH"
+    [ -f /usr/share/applications/proton-exe.desktop ] \
+        && ok "proton: 'Open with Proton' desktop entry shipped" \
+        || bad "proton: proton-exe.desktop missing"
+    xdg-mime query default application/x-ms-dos-executable 2>/dev/null | grep -q "proton-exe.desktop" \
+        && ok "proton: double-clicking a .exe opens it with Proton (default MIME handler)" \
+        || bad "proton: .exe MIME type is not mapped to proton-exe.desktop"
+    xdg-mime query filetype /usr/bin/proton-exe >/dev/null 2>&1 \
+        && ok "proton: mime database readable" || true
 else
     bad "proton: proton-exe missing or broken"
 fi

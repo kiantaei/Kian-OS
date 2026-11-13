@@ -1,0 +1,10 @@
+# Kian OS — system-wide default applications.
+#
+# Windows executables open with Proton (proton-exe) when double-clicked in
+# Thunar/xfdesktop or opened from any XDG-compliant file manager. The MIME
+# types are the ones shared-mime-info assigns to .exe/.msi-style binaries.
+[Default Applications]
+application/x-ms-dos-executable=proton-exe.desktop
+application/x-msdownload=proton-exe.desktop
+application/x-msdos-program=proton-exe.desktop
+application/vnd.microsoft.portable-executable=proton-exe.desktop

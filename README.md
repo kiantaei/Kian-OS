@@ -49,6 +49,129 @@ Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox).
 - Kian OS with hardware clock in UTC
 - UEFI Firmware Settings / Boot existing OS / Reboot / Power off
 
+## Complete installation guide
+
+From "I have the ISO" to "Kian OS runs from disk". Building or downloading the
+image is step 0 — see [Build the ISO](#build-the-iso).
+
+### 0. What you need
+
+- `kian-os-0.4.0-x86_64.iso` (built locally or taken from a release) and its
+  `.sha256` file.
+- **2 GB RAM minimum, 4 GB recommended** (Chromium + the installer).
+- **20 GB** of free disk space for the installation.
+- **Internet inside the live session** — the packages come from the Arch
+  mirrors; without a connection the installer cannot pacstrap.
+- A disk (virtual or physical) you are willing to **erase completely**.
+
+### 1. Boot the ISO
+
+**VMware Workstation/Player/Fusion (primary target)**
+
+1. *Create a New Virtual Machine* → *Installer disc image file (iso)* → pick the ISO.
+2. Guest OS: *Linux → Other Linux 5.x and later kernel 64-bit*.
+3. 2–4 GB RAM, 2 CPUs, 20 GB+ disk, network **NAT**.
+4. Start the VM. If the display stays black on a host without 3D support, turn
+   *Accelerate 3D graphics* off in the VM settings.
+
+**QEMU**
+
+```bash
+qemu-system-x86_64 -enable-kvm -m 4096 -smp 2 \
+  -drive file=kian-os.qcow2,if=virtio,format=qcow2 \
+  -cdrom kian-os-0.4.0-x86_64.iso -boot d
+```
+
+**Real PC**
+
+Write the ISO to a USB stick (`sudo dd if=kian-os-0.4.0-x86_64.iso of=/dev/sdX
+bs=4M status=progress oflag=sync` — check `/dev/sdX` with `lsblk`), boot from it,
+and disable Secure Boot if the firmware refuses the unsigned bootloader.
+
+Pick **Kian OS 0.4.0 (Horizon)** in the GRUB (UEFI) or syslinux (BIOS) menu.
+
+### 2. The live desktop
+
+The live session auto-logs-in as **`kian` / `kian`** into the Kian XFCE desktop.
+Check the network before installing:
+
+```bash
+ping -c1 archlinux.org
+ip -brief address
+```
+
+Everything in the live session lives in RAM: files, settings and packages are
+gone after a reboot unless you install to disk (or use `sudo kian-persist` for a
+persistent live session).
+
+### 3. Install — pick one path
+
+**A. Simple installer (recommended).** The welcome window opens by itself; click
+*Simple installer*, or open a terminal and run:
+
+```bash
+sudo kian-install
+```
+
+It asks exactly **two** questions — mirror region and timezone — then detects the
+target disk, shows a **10-second erase countdown** (Ctrl+C aborts), creates
+GPT+ESP (UEFI) or MBR (BIOS) partitions, pacstraps the full Kian desktop,
+installs GRUB, creates the `kian` user (password `kian`) and applies the Kian
+branding. Override the disk with `sudo kian-install --disk /dev/sdX`. The log is
+`/tmp/kian-install.log`.
+
+**B. Full control (archinstall fork).** Welcome window → *Install Kian OS*, or:
+
+```bash
+sudo kianinstall
+```
+
+Configure **Disk configuration** first, then Profile and Authentication. When it
+finishes choose **Exit** (not Reboot) at the post-install screen — that is when
+`kian-apply` brands the new system. If you rebooted by mistake, boot the ISO and
+run `sudo kian-apply`.
+
+**C. Your own Arch install.** Already have Arch on disk? Boot the ISO and run
+`sudo kian-apply /dev/sdXN` (see [Installed system](#installed-system)).
+
+### 4. Finish and reboot
+
+1. Shut down the machine.
+2. Detach the ISO (VMware: *VM → Settings → CD/DVD → disconnect*; real PC:
+   remove the USB stick).
+3. Power on.
+
+### 5. First boot and login
+
+GRUB shows the **Kian OS** entry; LightDM shows the Kian greeter. Log in with
+`kian` / `kian` (simple installer) or the account you created in the
+archinstall menu.
+
+### 6. First things to do on the installed system
+
+```bash
+sudo pacman -Syu          # update to the current Arch packages
+passwd                    # change the default kian/kian password
+sudo systemctl status NetworkManager
+proton-exe "test.exe"     # Windows programs via Proton (see below)
+```
+
+Your files now live on the disk and survive reboots. If you installed a *minimal*
+profile, there is no desktop: boot the ISO and run `sudo kian-apply /dev/sdXN`,
+which offers to install the full Kian desktop into that system.
+
+### 7. If something goes wrong
+
+| Symptom | What to do |
+|---|---|
+| Black screen in a VM right after the boot menu | Disable 3D acceleration, or add `nomodeset` to the kernel command line in the boot menu |
+| `ScreenStackError: Can't pop screen` | archinstall TUI bug — see [Installer troubleshooting](#installer-troubleshooting); the text installer `sudo kian-install` is unaffected |
+| Installer window closes instantly | Start it from the desktop menu (**Kian OS Installer**) instead of a root shell |
+| No internet in the live session | Check the VM network is NAT/bridged; `nmcli device status`, `ping -c1 archlinux.org` |
+| Installation stops at `pacstrap` | No network, or a mirror region that is unreachable — re-run `sudo kian-install` and pick another region |
+| Installed system lands on a text login | Log in and run `sudo systemctl enable --now lightdm`, then `startxfce4` |
+| Wrong system booted after install | Reboot and pick *Kian OS* in GRUB; check the boot order in the firmware/VM settings |
+
 ## Build the ISO
 
 The build uses [archiso](https://gitlab.archlinux.org/archlinux/archiso) with a
@@ -208,6 +331,11 @@ build that `umu-launcher` downloads on first use. `umu-launcher` ships in the
 image (multilib), so no Steam account is needed; the first run downloads
 Proton plus the Steam Linux Runtime (once, into `~/.local/share/Steam/`).
 
+Double-clicking a `.exe` works the same way: `proton-exe.desktop` is the
+registered default handler for the Windows executable MIME types
+(`/etc/xdg/mimeapps.list`), so Thunar, xfdesktop and any XDG file manager open
+it with Proton instead of asking for an application.
+
 Prefixes are kept per Proton build under `~/.local/share/kian-proton/`, so
 switching builds never corrupts an existing prefix. If `umu-run` is missing
 but a Proton directory exists, the command falls back to Proton's own
@@ -253,6 +381,76 @@ the window still cannot open, prints yad's actual error instead of claiming the
 window was closed. On an older ISO the workaround is to start it from the
 desktop menu (**Kian OS Installer**) as `kian`, or to use the text installer
 `sudo kian-install`.
+
+## Credits & components
+
+Kian OS is glue, branding and a lot of configuration on top of other people's
+work. Everything below is used unmodified (or configured, not forked) unless
+stated otherwise; all trademarks belong to their owners, and this project is
+not affiliated with Arch Linux, Valve, XFCE or any other upstream.
+
+**Operating system and packaging**
+
+- **Arch Linux** — the base distribution: kernel, systemd, GNU userland, pacman,
+  mirrors. <https://archlinux.org>
+- **archiso** (`mkinitcpio-archiso`) — builds the live ISO, its squashfs image and
+  the persistence (`cow_label`) support.
+- **Linux kernel**, **systemd**, **GNU coreutils / Bash**, **pacman**, **GRUB**
+  and **syslinux/ISOLINUX** — boot, init, shell, package management.
+- **archinstall** — the upstream installer; Kian OS also ships **kianinstall**,
+  Kian's fork of it, vendored at `/opt/kianinstall`
+  (<https://github.com/kiantaei/kianinstall>), plus Kian's own two-question
+  `kian-install`.
+- **parted**, **dosfstools**, **e2fsprogs**, **arch-install-scripts** — the
+  partitioning / `pacstrap` / `arch-chroot` tooling the installer drives.
+
+**Desktop**
+
+- **Xfce 4** — `xfwm4`, `xfce4-panel`, `xfdesktop`, `xfce4-session`,
+  `xfce4-settings`, `xfconf`, `Thunar`, `Mousepad`, `xfce4-terminal`,
+  `xfce4-taskmanager`, `galculator` (Calculator), **Whisker Menu** plugin.
+  <https://xfce.org>
+- **LightDM** + **lightdm-gtk-greeter** — the login screen.
+- **GTK**, **Materia** GTK theme, **Papirus** icon theme, **Liberation / DejaVu /
+  Noto** fonts.
+- **yad** — the installer welcome / status dialogs.
+
+**Applications and tools**
+
+- **Chromium** — the engine behind **Xenox**, Kian's browser profile (own
+  user-data dir and start page); <https://www.chromium.org>
+- **fastfetch** — provides the `neofetch` command (neofetch is no longer in the
+  Arch repositories).
+- **git**, **GCC / base-devel**, **Python**, **nano**, **htop**, **tree**,
+  **man-db**, **bash-completion**.
+- **NetworkManager** + applet, **polkit-gnome**, **GVFS / tumbler /
+  thunar-volman**, **xdg-utils / xdg-user-dirs**.
+- **open-vm-tools**, **qemu-guest-agent** — guest integration for VMware/QEMU.
+
+**Proton (Windows programs)**
+
+- **Valve Steam** and **Proton**, including **Proton Experimental** — Valve's
+  Wine-based compatibility layer for Windows games and applications.
+  <https://github.com/ValveSoftware/Proton>
+- **umu-launcher** (Open Wine Components) — runs Proton outside the Steam
+  client, inside the Steam Linux Runtime; this is what `proton-exe` and the
+  double-click `.exe` handler use. <https://github.com/Open-Wine-Components/umu-launcher>
+- **Wine**, **DXVK**, **VKD3D-Proton**, **Steam Linux Runtime** — used indirectly
+  through Proton (bundled in the Proton builds, not modified by Kian OS).
+- **UMU-Proton** — the Proton-Experimental-based build `umu-launcher` downloads
+  on first use.
+
+**Build, test and release**
+
+- **Docker / WSL** for building the ISO on Windows (`build.ps1`), **QEMU** for
+  the automated boot test, **VMware Workstation** as the primary target VM.
+- **GitHub Actions** + `softprops/action-gh-release` for CI builds and releases.
+
+**Design**
+
+- The Kian OS wordmark, wallpaper gradient (`#1A2B4A → #3B0A45`), `#0078D4`
+  accent and the Kian SVG icon set are original to this project (see
+  `archiso/kian/airootfs/usr/share/icons/`).
 
 ## Repository layout
 

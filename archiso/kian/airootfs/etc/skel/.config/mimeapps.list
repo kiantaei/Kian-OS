@@ -3,3 +3,7 @@ x-scheme-handler/http=kian-xenox.desktop
 x-scheme-handler/https=kian-xenox.desktop
 text/html=kian-xenox.desktop
 application/xhtml+xml=kian-xenox.desktop
+application/x-ms-dos-executable=proton-exe.desktop
+application/x-msdownload=proton-exe.desktop
+application/x-msdos-program=proton-exe.desktop
+application/vnd.microsoft.portable-executable=proton-exe.desktop

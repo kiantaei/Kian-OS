@@ -103,3 +103,7 @@ e2fsprogs
 # 1.4.4-1. Proton itself is NOT in the Arch repos — it is downloaded on first
 # use (UMU-Proton) or taken from Steam's "Proton - Experimental".
 umu-launcher
+# .exe MIME detection + desktop database so double-clicking an .exe uses
+# proton-exe (extra/shared-mime-info 2.5.1-2, extra/desktop-file-utils).
+shared-mime-info
+desktop-file-utils
