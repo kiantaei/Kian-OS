@@ -8,6 +8,10 @@ live-boot
 live-boot-initramfs-tools
 live-config
 live-config-systemd
+# REQUIRED by live-config's 0030-user-setup: without the user-setup package
+# installed, live-config exits early at boot and the kian/live user is never
+# created -> 'Login incorrect' on the console (found in CI boot test).
+user-setup
 sudo
 
 # ---- firmware (explicit: live-build 3.0~a57-1ubuntu49's own firmware
