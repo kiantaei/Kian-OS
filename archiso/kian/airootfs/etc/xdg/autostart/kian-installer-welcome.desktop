@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Kian OS Installer Welcome
+Comment=Opens the Kian OS installer window on the live desktop (Arch base, GUI install)
+Exec=/usr/local/bin/kian-install-gui
+TryExec=/usr/local/bin/kian-install-gui
+Icon=kian-os-logo
+Terminal=false
+Categories=System;
+X-GNOME-Autostart-enabled=true
+NoDisplay=false

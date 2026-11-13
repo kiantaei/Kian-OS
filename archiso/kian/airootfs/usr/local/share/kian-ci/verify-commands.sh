@@ -155,6 +155,35 @@ echo "$KIH" | grep -q "Kian OS installer" \
 KPH="$(kian-persist --help 2>/dev/null | head -8)"
 echo "$KPH" | grep -q "persistence" \
     && ok "kian-persist: --help prints (real live persistence)" || bad "kian-persist: --help output unexpected"
+
+# 8b. Installer GUI (auto-opens on the live desktop, installs Arch base and
+#     keeps the full Kian OS identity via kian-apply).
+command -v yad >/dev/null 2>&1 && ok "gui: yad dialog tool installed" || bad "gui: yad missing"
+if [ -x /usr/local/bin/kian-install-gui ] && bash -n /usr/local/bin/kian-install-gui 2>/dev/null; then
+    ok "gui: kian-install-gui executable and syntax-clean"
+    grep -q "kian-apply -y /mnt" /usr/local/bin/kian-install-gui \
+        && ok "gui: kianinstall path auto-applies Kian branding (installed system is never plain Arch)" \
+        || bad "gui: the archinstall path does NOT run kian-apply after install"
+    grep -q "/run/archiso/bootmnt" /usr/local/bin/kian-install-gui \
+        && ok "gui: live-session-only guard present (installed systems are never re-installed by autostart)" \
+        || bad "gui: live-only guard missing"
+else
+    bad "gui: kian-install-gui missing or not executable"
+fi
+[ -f /etc/xdg/autostart/kian-installer-welcome.desktop ] \
+    && ok "gui: autostart entry shipped (welcome window opens when the live desktop starts)" \
+    || bad "gui: autostart entry missing"
+[ -f /usr/share/applications/kian-installer.desktop ] \
+    && ok "gui: 'Kian OS Installer' menu entry shipped" || bad "gui: menu entry missing"
+[ -f /usr/share/kian/installer-banner.png ] \
+    && ok "gui: installer banner shipped" || bad "gui: installer banner missing"
+if [ -x /usr/local/bin/kian-apply ] && bash -n /usr/local/bin/kian-apply 2>/dev/null; then
+    ok "branding: kian-apply executable and syntax-clean (copies every Kian file onto the installed root)"
+    grep -q "Kian OS" /usr/share/kian/os-release 2>/dev/null \
+        && ok "branding: Kian os-release source present" || bad "branding: os-release source missing"
+else
+    bad "branding: kian-apply missing or broken"
+fi
 PERSIST_SHIPPED=0
 # The boot config lives on the ISO filesystem. /run/archiso/bootmnt is only
 # still mounted when copytoram did NOT kick in (it copies the airootfs to RAM

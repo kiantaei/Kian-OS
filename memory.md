@@ -55,6 +55,19 @@ archive/legacy-standalone/   pre-0.4.0 from-scratch kernel/GUI (frozen, not buil
   (`GRUB_DISTRIBUTOR="Kian OS"`), then `kian-apply -y /mnt`. Needs
   `arch-install-scripts` + `parted` (in packages.x86_64). `kianinstall` (the
   archinstall fork, vendored at /opt/kianinstall) stays as the advanced option.
+- Installer GUI (0.4.0, per user request): `kian-install-gui` (yad, banner at
+  /usr/share/kian/installer-banner.png) AUTO-OPENS on the live desktop via
+  /etc/xdg/autostart/kian-installer-welcome.desktop. Buttons: Install Kian OS
+  (kianinstall archinstall fork in xfce4-terminal) / Simple installer
+  (kian-install) / Try Kian OS. CRITICAL: the kianinstall path runs
+  `kian-apply -y /mnt` AUTOMATICALLY after a successful archinstall — without
+  it the archinstall target stays plain Arch (user requirement: installed
+  system must keep ALL Kian files/identity). Live-session-only guard: exits
+  unless /run/archiso/bootmnt exists (autostart must never trigger on an
+  installed system); lock at ${XDG_RUNTIME_DIR:-/tmp}/kian-install-gui.lock
+  (/run is root-owned — do not put the lock there). `yad` added to
+  packages.x86_64 (extra/yad 15.0, verified on archlinux.org). Verify checks:
+  gui:* + branding:* (kian-apply presence, auto-apply grep, guard grep).
 - Persistence: archiso cow mechanics verified from mkinitcpio-archiso 73
   (`/usr/share/doc/mkinitcpio-archiso/README.bootparams`): with squashfs the
   overlay is OVERLAYFS; `cow_label=KIANPERSIST` mounts that partition as the

@@ -56,6 +56,8 @@ xdg-user-dirs
 xdg-utils
 polkit-gnome
 materia-gtk-theme
+# GUI dialogs for the auto-opening installer welcome window (kian-install-gui)
+yad
 papirus-icon-theme
 ttf-liberation
 ttf-dejavu

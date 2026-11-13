@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Kian OS Installer
+GenericName=System Installer
+Comment=Install Kian OS (Arch Linux base) to disk — graphical installer window
+Exec=/usr/local/bin/kian-install-gui
+TryExec=/usr/local/bin/kian-install-gui
+Icon=kian-os-logo
+Terminal=false
+Categories=System;Utility;
+Keywords=install;kian;arch;archinstall;

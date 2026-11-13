@@ -41,7 +41,7 @@ Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox).
 | **Apps** | Proper `.desktop` registration: Xenox Browser, Kian Terminal, File Manager (Thunar), Notepad (Mousepad), Calculator (galculator), Settings, Task Manager. |
 | **Users** | Real accounts: `kian` (uid 1000, wheel/sudo) created by `kian-setup.service`; root locked; desktop never runs as root. |
 | **Filesystem** | Real hierarchy: `/`, `/home/kian` with `Desktop/ Documents/ Downloads/ Music/ Pictures/ Videos/`. |
-| **Installer** | **kian-install** — Kian OS's own installer, no archinstall: asks only **mirror region** (regenerates the mirrorlist) and **timezone**, auto-detects the target disk, pacstraps the full desktop, sets up GRUB + the `kian` user, then applies the Kian branding. For full menu control the ISO also ships **kianinstall** — Kian's own archinstall fork ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall), vendored at `/opt/kianinstall`). |
+| **Installer** | A **welcome GUI opens automatically on the live desktop** (`kian-install-gui`, yad): one click launches the installer in a terminal window. **kian-install** (Kian's own installer, no archinstall) asks only **mirror region** + **timezone**, auto-detects the target disk, pacstraps the full desktop, sets up GRUB + the `kian` user, then applies the Kian branding. For menu control, **kianinstall** — Kian's own archinstall fork ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall), vendored at `/opt/kianinstall`) — and the GUI **auto-runs `kian-apply`** after it, so an installed system is always full Kian OS, never plain Arch. |
 
 ## Boot menu (GRUB/syslinux)
 
@@ -108,22 +108,30 @@ steps; see [`docs/verification.md`](docs/verification.md). Quick manual pass:
    (log out to see the LightDM greeter).
 3. Use the taskbar/start menu, open **Kian Terminal** and try `pacman -Syu`,
    `gcc`, `python3`, `neofetch`, `sudo pacman -S tree`.
-4. `sudo kian-install` installs Kian OS to a disk. This is **Kian OS's own
-   installer** — no archinstall involved. It asks exactly **two questions**:
-   which **mirror region** to download packages from (it regenerates
-   `/etc/pacman.d/mirrorlist` for that region from the official status API —
-   pick the one closest to you, it decides install speed) and the
-   **timezone**. Everything else is automatic: the target disk is detected
-   (empty unpartitioned disks first, then the largest disk that is not the
-   boot medium; there is a loud 10-second erase countdown before anything
-   happens — Ctrl+C aborts), the disk is partitioned (GPT + ESP on UEFI, MBR
-   on BIOS), the full Kian OS desktop is installed with `pacstrap`, GRUB is
-   set up, the `kian` user is created (password `kian`), and `kian-apply`
-   brands the new system. Reboot with the ISO detached.
-   For menu-driven full control (partitioning choices, encryption, etc.) the
-   ISO also carries **Kian's own archinstall fork**
-   ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall),
-   pinned commit, vendored at `/opt/kianinstall`): run `sudo kianinstall`.
+4. **Installing Kian OS** — when the live desktop starts, the
+   **installer welcome window opens automatically** (`kian-install-gui`,
+   also in the menu as *Kian OS Installer*) with three buttons:
+   * **Install Kian OS** — opens the kianinstall fork of archinstall
+     ([github.com/kiantaei/kianinstall](https://github.com/kiantaei/kianinstall),
+     pinned commit, vendored at `/opt/kianinstall`) in a terminal window for
+     menu-driven control (partitioning, encryption, etc.). When it finishes,
+     `kian-apply` runs **automatically** on the mounted target — the installed
+     system is **Kian OS** (wallpaper, xenox, Kian apps, panel defaults,
+     os-release), never plain Arch.
+   * **Simple installer** — `sudo kian-install`, Kian OS's own installer: it
+     asks exactly **two questions** (which **mirror region** to download
+     packages from — it regenerates `/etc/pacman.d/mirrorlist` for that
+     region from the official status API; and the **timezone**). Everything
+     else is automatic: the target disk is detected (empty unpartitioned
+     disks first, then the largest disk that is not the boot medium; there is
+     a loud 10-second erase countdown before anything happens — Ctrl+C
+     aborts), the disk is partitioned (GPT + ESP on UEFI, MBR on BIOS), the
+     full Kian OS desktop is installed with `pacstrap`, GRUB is set up, the
+     `kian` user is created (password `kian`), and `kian-apply` brands the
+     new system. Reboot with the ISO detached.
+   * **Try Kian OS** — close the window and keep using the live session.
+   The welcome window exists only on the live ISO; an installed Kian OS
+   never re-opens it.
 
 ### Real persistence in the live session ("not like live")
 

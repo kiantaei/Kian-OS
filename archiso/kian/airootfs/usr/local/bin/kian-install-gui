@@ -1,0 +1,116 @@
+#!/bin/bash
+# Kian OS — installer welcome GUI.
+#
+# OPENS AUTOMATICALLY when the live session starts (autostart:
+# /etc/xdg/autostart/kian-installer-welcome.desktop) and offers the
+# graphical way to install Kian OS (Arch Linux base) to disk:
+#
+#   * "Install Kian OS"        — the kianinstall fork of archinstall
+#                                (pinned, vendored at /opt/kianinstall)
+#                                in a terminal window; when it finishes,
+#                                kian-apply -y is run on the mounted
+#                                target AUTOMATICALLY so the installed
+#                                system is Kian OS — never plain Arch.
+#   * "Simple installer"       — Kian OS's own installer (kian-install:
+#                                asks mirror region + timezone, erases
+#                                the disk, pacstraps the full desktop and
+#                                applies the branding itself).
+#   * "Try Kian OS"            — just close this window.
+#
+# LIVE SESSION ONLY: on an installed system /run/archiso/bootmnt does not
+# exist and this script exits (it says so in a dialog instead of installing
+# anything over the running machine).
+#
+# Honesty policy: nothing is installed unless the user clicks a button and
+# confirms inside the installer; the GUI only launches the real installers.
+
+set -uo pipefail
+
+BANNER=/usr/share/kian/installer-banner.png
+# /run is root-owned; the live user needs a writable lock location.
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/kian-install-gui.lock"
+
+say() { printf '\033[1;34m[kian-install-gui]\033[0m %s\n' "$*"; }
+
+# --- guards -----------------------------------------------------------------
+# Already running? (autostart + manual menu launch must not stack windows)
+# The plain pre-touch keeps a failing redirection quiet and non-fatal.
+: >"${LOCK}" 2>/dev/null || true
+exec 9>>"${LOCK}" 2>/dev/null || true
+flock -n 9 2>/dev/null || exit 0
+
+# Needs a graphical session.
+if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    say "no graphical session — not showing the installer GUI"
+    exit 0
+fi
+
+# The kianinstall fork runs as a TUI — it needs a terminal.
+if ! command -v yad >/dev/null 2>&1 || ! command -v xfce4-terminal >/dev/null 2>&1; then
+    say "yad or xfce4-terminal missing — GUI installer unavailable (use: sudo kian-install)"
+    exit 0
+fi
+
+# Not a live session (installed system) — say so and stop.
+if [ ! -d /run/archiso/bootmnt ]; then
+    yad --info --title="Kian OS" \
+        --text="Kian OS is already installed on this machine.\n\nTo reinstall, boot from the Kian OS ISO (the installer opens automatically)." \
+        --button="OK:0" --width=420 --timeout=15 >/dev/null 2>&1
+    exit 0
+fi
+
+[ -f "${BANNER}" ] || BANNER=""
+
+# --- the welcome window ------------------------------------------------------
+# Button exit codes (yad): 0 = Install Kian OS, 2 = simple installer,
+# 1 = Try Kian OS / window closed (252 = closed via WM too).
+ret=0
+yad --title="Kian OS 0.4.0 — Welcome" \
+    --window-icon=kian-os-logo \
+    ${BANNER:+--image="${BANNER}" --image-on-top} \
+    --text="<span font='11'><b>Welcome to Kian OS 0.4.0 (Horizon)</b></span>\nA Linux-based desktop operating system on an <b>Arch Linux</b> base.\n\nTry everything live — nothing touches your disk until you install.\nWhen you are ready, install Kian OS to disk and keep <b>every Kian OS\nfile, app and setting</b>: the installer applies the full Kian identity\n(wallpaper, xenox, Kian apps, panel defaults) on top of Arch." \
+    --justify=center \
+    --button="Install Kian OS!go-up:0" \
+    --button="Simple installer!applications-system:2" \
+    --button="Try Kian OS!window-close:1" \
+    --width=560 >/dev/null 2>&1
+ret=$?
+
+case "$ret" in
+    0)  # --- graphical installer: kianinstall (archinstall fork) ---------
+        say "opening the kianinstall (archinstall) installer ..."
+        xfce4-terminal --title="Kian OS Installer (archinstall)" --geometry=110x32 -x bash -c '
+            sudo /usr/local/bin/kianinstall
+            rc=$?
+            echo
+            if [ "$rc" -eq 0 ] && [ -f /mnt/usr/bin/pacman ] && [ -f /mnt/etc/fstab ]; then
+                echo "archinstall finished — now applying the Kian OS identity (kian-apply) ..."
+                echo "so the installed system is KIAN OS, not plain Arch."
+                sudo /usr/local/bin/kian-apply -y /mnt && echo "KIAN_BRANDING_APPLIED" || echo "kian-apply reported errors — run:  sudo kian-apply /mnt"
+            else
+                echo "archinstall did not complete a usable install (exit '$rc' or /mnt is empty)."
+                echo "Nothing was changed by the branding step. You can simply try again."
+            fi
+            echo
+            echo "When the installer is done: power off, remove the ISO from the CD drive, boot from disk."
+            echo "Press Enter to close this window."
+            read -r'
+        # Honest completion window (what actually happened is in the terminal).
+        yad --info --title="Kian OS — Installer" \
+            --text="The installer window was closed.\n\n• If it printed <b>KIAN_BRANDING_APPLIED</b>, Kian OS (Arch base, full Kian\n  identity) is on disk: power off, remove the ISO, boot from disk.\n• If anything failed, the reason is printed in that terminal —\n  you can restart any time from this window (it stays on the desktop\n  menu: <b>Kian OS Installer</b>)." \
+            --button="OK:0" --width=520 >/dev/null 2>&1
+        ;;
+    2)  # --- simple installer: kian-install (applies branding itself) -----
+        say "opening the simple installer (kian-install) ..."
+        xfce4-terminal --title="Kian OS Installer (kian-install)" --geometry=100x30 -x bash -c '
+            sudo /usr/local/bin/kian-install
+            echo
+            echo "Press Enter to close this window."
+            read -r'
+        ;;
+    *)  # 1 / 252 — Try Kian OS or window closed
+        say "welcome window closed — the live session continues; the installer is in the menu (Kian OS Installer)"
+        ;;
+esac
+
+exit 0

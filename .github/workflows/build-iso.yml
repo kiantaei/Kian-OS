@@ -49,6 +49,7 @@ jobs:
           bash -n archiso/kian/airootfs/usr/local/bin/kian-install
           bash -n archiso/kian/airootfs/usr/local/bin/kian-persist
           bash -n archiso/kian/airootfs/usr/local/bin/kianinstall
+          bash -n archiso/kian/airootfs/usr/local/bin/kian-install-gui
           bash -n archiso/kian/airootfs/usr/local/bin/kian-apply
           bash -n archiso/kian/airootfs/usr/local/bin/kian-panel-position-fix
           bash -n archiso/kian/airootfs/usr/local/bin/kian-trust-desktop
