@@ -169,6 +169,7 @@ which offers to install the full Kian desktop into that system.
 | Installer window closes instantly | Start it from the desktop menu (**Kian OS Installer**) instead of a root shell |
 | No internet in the live session | Check the VM network is NAT/bridged; `nmcli device status`, `ping -c1 archlinux.org` |
 | Installation stops at `pacstrap` | No network, or a mirror region that is unreachable — re-run `sudo kian-install` and pick another region |
+| `mkfs.ext4: The file /dev/sda1 does not exist and no size was specified` | Fixed in 0.4.0 builds after the partitioning fix (`wipefs` ran after `parted` and deleted the new table). On an older ISO use `sudo kianinstall` instead, or re-build the ISO |
 | Installed system lands on a text login | Log in and run `sudo systemctl enable --now lightdm`, then `startxfce4` |
 | Wrong system booted after install | Reboot and pick *Kian OS* in GRUB; check the boot order in the firmware/VM settings |
 

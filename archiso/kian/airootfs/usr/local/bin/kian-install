@@ -48,6 +48,18 @@ findmnt -n /run/archiso/bootmnt >/dev/null 2>&1 \
 command -v pacstrap >/dev/null || die "pacstrap not found (arch-install-scripts package missing from this ISO)"
 command -v parted   >/dev/null || die "parted not found on this ISO"
 
+# Wait for a partition device node to appear. parted writes the table, but the
+# kernel/udev can create /dev/sdaN a moment later — formatting a node that does
+# not exist yet is what produced "The file /dev/sda1 does not exist".
+wait_for_part() {
+    local dev="$1" i
+    for i in $(seq 1 50); do
+        [ -b "$dev" ] && return 0
+        sleep 0.2
+    done
+    return 1
+}
+
 # ---------------------------------------------------------------------------
 # Question 1 of 2 — mirror region ("repo regen")
 # ---------------------------------------------------------------------------
@@ -263,6 +275,22 @@ echo
 # ---------------------------------------------------------------------------
 # Partition + format
 # ---------------------------------------------------------------------------
+# Wipe signatures BEFORE partitioning. Running wipefs after parted deletes the
+# fresh partition table — that is exactly what broke the install in 0.4.0
+# (/dev/sda1 vanished, mkfs.ext4 failed), so the order here matters.
+# Release anything the live session may have auto-mounted from the target
+# (Thunar/gvfs mount it on click) and any swap area on it — otherwise
+# wipefs/parted fail with "device or resource busy".
+while read -r part; do
+    [ -n "$part" ] || continue
+    swapoff "$part" 2>/dev/null || true
+    umount "$part" 2>/dev/null || true
+done < <(lsblk -rno PATH "$DISK" 2>/dev/null | tail -n +2)
+umount -R "$MOUNT" 2>/dev/null || true
+say "clearing old signatures on $DISK ..."
+wipefs -a "$DISK" >/dev/null 2>&1 || warn "wipefs reported errors on $DISK (continuing)"
+sync
+
 if [ -d /sys/firmware/efi ]; then
     BOOT_MODE="uefi"
     say "UEFI system detected — GPT: 1 GiB ESP + ext4 root"
@@ -277,7 +305,8 @@ if [ -d /sys/firmware/efi ]; then
 else
     BOOT_MODE="bios"
     say "BIOS system — MBR: ext4 root (GRUB in the MBR)"
-    parted -s "$DISK" mklabel msdos mkpart primary ext4 1MiB 100% || die "partitioning failed (is $DISK in use? detach it and retry)"
+    parted -s "$DISK" mklabel msdos mkpart primary ext4 1MiB 100% set 1 boot on \
+        || die "partitioning failed (is $DISK in use? detach it and retry)"
     case "$DISK" in
         /dev/nvme*|/dev/mmcblk*) PART1="${DISK}p1" ;;
         *) PART1="${DISK}1" ;;
@@ -285,8 +314,13 @@ else
     PART2=""
 fi
 
-sync
-wipefs -a "$DISK" >/dev/null 2>&1 || true
+# Re-read the partition table and wait for the device nodes before formatting.
+partprobe "$DISK" 2>/dev/null || true
+udevadm settle --timeout=10 2>/dev/null || true
+wait_for_part "$PART1" || die "kernel did not create $PART1 after partitioning — run 'partprobe $DISK' and retry"
+if [ -n "$PART2" ]; then
+    wait_for_part "$PART2" || die "kernel did not create $PART2 after partitioning — run 'partprobe $DISK' and retry"
+fi
 
 if [ -n "$PART2" ]; then
     mkfs.vfat -F32 -n KIAN_EFI "$PART1" || die "mkfs.vfat failed on $PART1"
@@ -296,7 +330,11 @@ else
 fi
 
 umount -R "$MOUNT" 2>/dev/null || true
-mount "$PART2" "$MOUNT" || mount "$PART1" "$MOUNT" || die "could not mount the new root"
+if [ -n "$PART2" ]; then
+    mount "$PART2" "$MOUNT" || die "could not mount the new root ($PART2)"
+else
+    mount "$PART1" "$MOUNT" || die "could not mount the new root ($PART1)"
+fi
 if [ -n "$PART2" ]; then
     mkdir -p "$MOUNT/efi"
     mount "$PART1" "$MOUNT/efi" || die "could not mount the ESP"
@@ -343,7 +381,7 @@ export KIAN_TZ="$TIMEZONE" KIAN_BOOT_MODE="$BOOT_MODE" KIAN_DISK="$DISK"
 if ! arch-chroot "$MOUNT" /bin/bash <<'CHROOT'
 set -euo pipefail
 ln -sf "/usr/share/zoneinfo/${KIAN_TZ}" /etc/localtime
-hwclock --systohc
+hwclock --systohc || true
 echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 locale-gen >/dev/null
 echo "LANG=en_US.UTF-8" > /etc/locale.conf

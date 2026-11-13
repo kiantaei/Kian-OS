@@ -123,7 +123,10 @@ case "$DISK" in
     /dev/nvme*|/dev/mmcblk*) PART="${DISK}p1" ;;
     *) PART="${DISK}1" ;;
 esac
-sleep 1
+partprobe "$DISK" 2>/dev/null || true
+udevadm settle --timeout=10 2>/dev/null || true
+for _i in $(seq 1 50); do [ -b "$PART" ] && break; sleep 0.2; done
+[ -b "$PART" ] || die "kernel did not create $PART after partitioning — run 'partprobe $DISK' and retry"
 mkfs.ext4 -F -L "$LABEL" "$PART" || die "mkfs.ext4 failed on $PART"
 sync
 
