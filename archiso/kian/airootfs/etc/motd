@@ -16,7 +16,8 @@ Kian OS is a Linux-based desktop operating system (Arch Linux base).
   * Persist:       sudo kian-persist    (save your live session FOR REAL: files,
                                         /etc, pacman installs survive reboot —
                                         then boot the "persistent session" entry)
-  * Branding:      sudo kian-apply      (Kian files onto an installed Arch)
+    * Branding:      sudo kian-apply       (Kian files onto an installed Arch)
+  * Windows apps:  proton-exe app.exe   (Proton; umu-launcher, no Steam needed)
   * Sudo:          kian is in wheel; password is the user password
   * Login:         user `kian`, password `kian` (live session default)
   * Root login is disabled; privilege escalation is via sudo only.

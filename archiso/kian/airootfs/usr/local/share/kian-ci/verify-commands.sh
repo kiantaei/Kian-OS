@@ -227,6 +227,20 @@ else
     bad "persist: cow_spacesize=2G missing from the kernel cmdline"
 fi
 
+# 8c. Proton: run Windows .exe programs with proton-exe (umu-launcher)
+if [ -x /usr/local/bin/proton-exe ] && bash -n /usr/local/bin/proton-exe 2>/dev/null; then
+    ok "proton: proton-exe executable and syntax-clean"
+    command -v umu-run >/dev/null 2>&1 \
+        && ok "proton: umu-launcher installed (Proton works without Steam)" \
+        || bad "proton: umu-run missing (umu-launcher not installed)"
+    # umu-launcher only exists in multilib: its presence proves the repo worked.
+    grep -q "PROTONPATH" /usr/local/bin/proton-exe \
+        && ok "proton: proton-exe selects a Proton build (Experimental / UMU-Proton)" \
+        || bad "proton: proton-exe does not reference PROTONPATH"
+else
+    bad "proton: proton-exe missing or broken"
+fi
+
 # 9. Timezone (Kian identity)
 [[ "$(readlink -f /etc/localtime)" == *Asia/Tehran* ]] && ok "timezone: Asia/Tehran" || bad "timezone: $(readlink -f /etc/localtime 2>/dev/null || echo none)"
 

@@ -95,3 +95,11 @@ parted
 # ---- Filesystem tools needed for installation ----
 dosfstools
 e2fsprogs
+
+# ---- Run Windows .exe programs with Proton (proton-exe) ----
+# umu-launcher runs Valve's Proton outside Steam (no Steam account needed) and
+# pulls the lib32 runtime Proton requires. It lives in the multilib repo, which
+# is enabled in archiso/kian/pacman.conf. Verified: multilib/umu-launcher
+# 1.4.4-1. Proton itself is NOT in the Arch repos — it is downloaded on first
+# use (UMU-Proton) or taken from Steam's "Proton - Experimental".
+umu-launcher

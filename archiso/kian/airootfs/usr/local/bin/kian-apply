@@ -281,6 +281,7 @@ apply_branding() {
     put "$LIVE/usr/bin/neofetch" "$t/usr/bin/neofetch" 0755
     put "$LIVE/usr/local/bin/kian-panel-position-fix" "$t/usr/local/bin/kian-panel-position-fix" 0755
     put "$LIVE/usr/local/bin/kian-trust-desktop" "$t/usr/local/bin/kian-trust-desktop" 0755
+    put "$LIVE/usr/local/bin/proton-exe" "$t/usr/local/bin/proton-exe" 0755
     mkdir -p "$t/etc/xdg/autostart"
     cp -a "$LIVE"/etc/xdg/autostart/kian-*.desktop "$t/etc/xdg/autostart/" 2>/dev/null || true
 
@@ -295,6 +296,16 @@ apply_branding() {
     fi
     # Keep the Kian identity across future `filesystem` upgrades in the target.
     put "$LIVE/etc/pacman.d/hooks/kian-os-release.hook" "$t/etc/pacman.d/hooks/kian-os-release.hook" 0644
+
+    # Windows .exe support: proton-exe needs umu-launcher, which lives in
+    # multilib. Enable that repository so `pacman -S umu-launcher` works.
+    if [ -f "$t/etc/pacman.conf" ] && grep -q '^#\[multilib\]' "$t/etc/pacman.conf"; then
+        sed -i '/^#\[multilib\]/{s/^#//;n;s/^#Include/Include/}' "$t/etc/pacman.conf" \
+            && say "enabled the multilib repository (needed by umu-launcher / proton-exe)"
+    fi
+    if [ ! -x "$t/usr/bin/umu-run" ]; then
+        say "Windows .exe support: run in the installed system:  sudo pacman -S umu-launcher"
+    fi
 
     # Existing users: add whatever Kian defaults they are missing (never
     # overwrite their own files) and make the launchers executable.

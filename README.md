@@ -191,6 +191,28 @@ The result is Kian OS **on an Arch base**: Arch packages and updates still come
 from the official repositories, while identity, branding and Kian's own files
 come from the ISO.
 
+### Run Windows .exe programs (Proton)
+
+Kian OS ships **`proton-exe`**, which runs Windows programs through Proton
+without the Steam client:
+
+```bash
+proton-exe "test.exe"                     # run a program
+proton-exe --proton ~/GE-Proton10-4 app.exe   # specific Proton build
+proton-exe --prefix ~/.wine game.exe      # specific Wine prefix
+```
+
+It uses, in order: `$PROTON_PATH`/`--proton`, Valve's **"Proton - Experimental"**
+from an installed Steam, then **UMU-Proton** — the Proton-Experimental-based
+build that `umu-launcher` downloads on first use. `umu-launcher` ships in the
+image (multilib), so no Steam account is needed; the first run downloads
+Proton plus the Steam Linux Runtime (once, into `~/.local/share/Steam/`).
+
+Prefixes are kept per Proton build under `~/.local/share/kian-proton/`, so
+switching builds never corrupts an existing prefix. If `umu-run` is missing
+but a Proton directory exists, the command falls back to Proton's own
+runner; with neither available it prints exactly what to install.
+
 ### First boot of the installed system
 
 1. Power off the VM/machine, detach the ISO (VMware: *VM → Settings → CD/DVD →

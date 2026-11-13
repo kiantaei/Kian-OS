@@ -35,6 +35,7 @@ file_permissions=(
   ["/usr/local/bin/kian-persist"]="0:0:755"
   ["/usr/local/bin/kianinstall"]="0:0:755"
   ["/usr/local/bin/kian-apply"]="0:0:755"
+  ["/usr/local/bin/proton-exe"]="0:0:755"
   # mkarchiso copies airootfs with --no-preserve=mode — every executable MUST
   # be listed here or it ships as 644 (found by the boot test: the installer
   # GUI script was present but not executable).
