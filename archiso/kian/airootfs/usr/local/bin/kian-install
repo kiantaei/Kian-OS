@@ -368,6 +368,22 @@ Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch
 Server = https://mirror.leaseweb.net/archlinux/$repo/os/$arch
 FALLBACK
 fi
+# --- rate-limit friendly package downloads (user request) ---
+# Packages download ONE at a time with a 10-second gap AFTER every package
+# (override: KIAN_DOWNLOAD_THROTTLE=seconds, 0 disables) so rate-limited
+# mirrors do not drop the connection. ONLY the download phase is throttled —
+# pacman extracts and installs at full speed. pacstrap uses the live
+# session's /etc/pacman.conf and /etc/pacman.d/mirrorlist, so editing the
+# live config is what actually controls the downloads.
+sed -i -E 's/^#?[[:space:]]*ParallelDownloads.*/ParallelDownloads = 1/' /etc/pacman.conf
+if grep -q '^XferCommand' /etc/pacman.conf; then
+    sed -i 's|^XferCommand.*|XferCommand = /usr/local/bin/kian-throttled-fetch %o %u|' /etc/pacman.conf
+else
+    sed -i '/^\[options\]/a XferCommand = /usr/local/bin/kian-throttled-fetch %o %u' /etc/pacman.conf
+fi
+THROTTLE="${KIAN_DOWNLOAD_THROTTLE:-10}"
+say "downloads throttled: one package at a time + ${THROTTLE}s gap after each package (KIAN_DOWNLOAD_THROTTLE to change, 0 to disable — installing is NOT throttled)"
+
 say "syncing package databases ..."
 if ! pacman -Sy --noconfirm >/tmp/kian-pacman-sync.log 2>&1; then
     tail -5 /tmp/kian-pacman-sync.log >&2 || true

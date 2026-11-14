@@ -214,6 +214,29 @@ grep -qF "Exec = /usr/bin/install -m 0644 /usr/share/kian/os-release /usr/lib/os
 grep -qF "&& /usr/bin/install" /etc/pacman.d/hooks/kian-os-release.hook 2>/dev/null \
     && bad "branding: os-release hook Exec contains shell operators (run 43484412717 shipped plain-Arch identity because of that)" \
     || ok "branding: os-release hook Exec has no shell operators (safe for libalpm direct exec)"
+
+# 8d. Throttled downloads (rate-limited mirrors: 10 s gap after each package,
+#     extraction NOT throttled — user request).
+if [ -x /usr/local/bin/kian-throttled-fetch ] && bash -n /usr/local/bin/kian-throttled-fetch 2>/dev/null; then
+    ok "throttle: kian-throttled-fetch executable and syntax-clean"
+    grep -qF 'THROTTLE="${KIAN_DOWNLOAD_THROTTLE:-10}"' /usr/local/bin/kian-throttled-fetch \
+        && ok "throttle: default 10 s, configurable via KIAN_DOWNLOAD_THROTTLE (0 disables)" \
+        || bad "throttle: the 10 s default / KIAN_DOWNLOAD_THROTTLE override is missing"
+    KIAN_DOWNLOAD_THROTTLE=0 /usr/local/bin/kian-throttled-fetch /tmp/kian-throttle-test https://archlinux.org/robots.txt >/dev/null 2>&1 \
+        && [ -s /tmp/kian-throttle-test ] \
+        && ok "throttle: real download works (curl -L -C - resume + retries)" \
+        || bad "throttle: test download of archlinux.org/robots.txt failed"
+    rm -f /tmp/kian-throttle-test
+    grep -qF 'XferCommand = /usr/local/bin/kian-throttled-fetch %o %u' /usr/local/bin/kian-install \
+        && ok "throttle: kian-install enables the throttled XferCommand" \
+        || bad "throttle: kian-install does not enable the throttled downloader"
+    grep -qF "ParallelDownloads = 1" /usr/local/bin/kian-install \
+        && ok "throttle: downloads forced serial (ParallelDownloads = 1 — the 10 s gap is real)" \
+        || bad "throttle: ParallelDownloads not forced to 1 (parallel downloads would defeat the gap)"
+else
+    bad "throttle: kian-throttled-fetch missing or broken"
+fi
+
 PERSIST_SHIPPED=0
 # The boot config lives on the ISO filesystem. /run/archiso/bootmnt is only
 # still mounted when copytoram did NOT kick in (it copies the airootfs to RAM
