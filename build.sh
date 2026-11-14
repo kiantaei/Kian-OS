@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kian OS 0.4.0 "Horizon" — Linux-based ISO build script.
+# Kian OS 0.4.1 "Horizon" — Linux-based ISO build script.
 #
 # Builds a bootable ISO (BIOS + UEFI) with archiso from the profile in
 # archiso/kian. Requirements:
