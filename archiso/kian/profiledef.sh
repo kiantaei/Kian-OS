@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034
 
-# Kian OS 0.4.0 "Horizon" — Linux-based desktop operating system.
+# Kian OS 0.4.1 "Horizon" — Linux-based desktop operating system.
 # Built with archiso (https://gitlab.archlinux.org/archlinux/archiso).
 # The profile is derived from the official archiso "releng" profile.
 
 iso_name="kian-os"
-iso_label="KIAN_OS_040"
+iso_label="KIAN_OS_041"
 iso_publisher="Kian OS <https://github.com/kiantaei/Kian-OS>"
 iso_application="Kian OS Live/Desktop Medium (Linux-based)"
-iso_version="0.4.0"
+iso_version="0.4.1"
 install_dir="kian"
 bootmodes=('bios.syslinux' 'uefi.grub')
 pacman_conf="pacman.conf"

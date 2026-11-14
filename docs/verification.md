@@ -1,4 +1,4 @@
-# Kian OS 0.4.0 — Verification checklist
+# Kian OS 0.4.1 — Verification checklist
 
 The migration requirements define 11 checks. Kian OS verifies them in two
 ways: **automated CI evidence** (real QEMU boot test, logs and screenshots are
@@ -15,7 +15,7 @@ what is verified where.
 4. runs `/usr/local/share/kian-ci/verify-commands.sh` inside the booted OS,
 5. captures desktop screenshots, publishes the ISO to Releases.
 
-Artifacts per run: `kian-os-0.4.0-x86_64.iso`, `.sha256`, serial transcript,
+Artifacts per run: `kian-os-0.4.1-x86_64.iso`, `.sha256`, serial transcript,
 boot-test summary, desktop screenshots.
 
 ## The 11-point checklist

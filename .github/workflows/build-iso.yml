@@ -83,8 +83,9 @@ jobs:
         run: |
           cd build/out
           ls -lh
-          sha256sum kian-os-*.iso > kian-os-0.4.0-x86_64.iso.sha256
-          cat kian-os-0.4.0-x86_64.iso.sha256
+          # version-independent: works for every iso_version bump
+          for f in kian-os-*.iso; do sha256sum "$f" > "$f.sha256"; done
+          cat kian-os-*.sha256
 
       # The ISO is published even if a test fails, so the artifact is never
       # lost; failed tests are then marked by the final gates below and the
@@ -94,7 +95,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 60
         run: |
-          bash scripts/ci-boot-test.sh build/out/kian-os-0.4.0-x86_64.iso build/test
+          bash scripts/ci-boot-test.sh build/out/kian-os-*.iso build/test
           cat build/test/boot-test-summary.txt
           echo "----- serial transcript (first 120 lines) -----"
           head -120 build/test/kian-serial-transcript.txt || true
@@ -115,7 +116,7 @@ jobs:
           truncate -s 14G build/install-test-disk.img
           TEST_RC=0
           bash scripts/ci-install-test.sh \
-            build/out/kian-os-0.4.0-x86_64.iso \
+            build/out/kian-os-*.iso \
             build/install-test-disk.img \
             build/install-test || TEST_RC=$?
           # always show the evidence in the job log, then keep the real rc
@@ -131,7 +132,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kian-os-0.4.0-build
+          name: kian-os-0.4.1-build
           path: |
             build/out/*.iso
             build/out/*.sha256
@@ -139,17 +140,34 @@ jobs:
             build/install-test/*
           if-no-files-found: warn
 
+      - name: Remove previous ISO assets from the rolling release
+        if: always() && github.ref == 'refs/heads/main' && hashFiles('build/out/*.iso') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The rolling release must contain exactly ONE current ISO. The
+          # filename changes on every version bump; without this step the old
+          # kian-os-0.4.0 asset would sit next to the new one and users kept
+          # booting the stale build (its installer died with "fstab came out
+          # empty" — fixed in 82bfcac, but the filename looked identical).
+          ASSETS=$(gh api "repos/${{ github.repository }}/releases/tags/latest" \
+            --jq '.assets[] | select(.name | test("kian-os-.*\\.(iso|sha256)$")) | .name' 2>/dev/null || true)
+          for a in $ASSETS; do
+            echo "removing stale asset: $a"
+            gh release delete-asset latest "$a" --yes || true
+          done
+
       - name: Publish rolling release (main)
         if: always() && github.ref == 'refs/heads/main' && hashFiles('build/out/*.iso') != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "Kian OS 0.4.0 rolling build"
+          name: "Kian OS 0.4.1 rolling build"
           prerelease: true
           overwrite_files: true
           fail_on_unmatched_files: true
           body: |
-            Automated rolling build of Kian OS 0.4.0 "Horizon" (Linux-based).
+            Automated rolling build of Kian OS 0.4.1 "Horizon" (Linux-based).
 
             - commit: ${{ github.sha }}
             - built with archiso in an archlinux:base-devel container

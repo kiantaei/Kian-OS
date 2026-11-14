@@ -17,7 +17,7 @@ echo "===== Kian OS verification suite ====="
 
 # 1. Identity: this really is Kian OS on a real Linux kernel
 grep -q '^NAME="Kian OS"' /etc/os-release && ok "identity: /etc/os-release is Kian OS" || bad "identity: os-release"
-grep -q '^PRETTY_NAME="Kian OS 0.4.0' /etc/os-release && ok "identity: version 0.4.0" || bad "identity: version"
+grep -q '^PRETTY_NAME="Kian OS 0.4.1' /etc/os-release && ok "identity: version 0.4.1" || bad "identity: version"
 [[ "$(id -u)" == 1000 ]] && ok "user: running as uid 1000 (kian), not root" || bad "user: unexpected uid $(id -u)"
 id -nG kian 2>/dev/null | grep -qw wheel && ok "sudo: kian is in wheel" || bad "sudo: kian not in wheel"
 [[ "$(id -u root)" == 0 ]] && ! sudo -l -U root true >/dev/null 2>&1 && true
@@ -237,6 +237,19 @@ else
     bad "throttle: kian-throttled-fetch missing or broken"
 fi
 
+# 8e. Installer regression tripwires — these two bugs killed every real
+#     hardware install behind commit 82bfcac ("fstab came out empty" +
+#     hook "cannot stat"), and a stale 0.4.0 ISO shipped them for a day.
+grep -qF '{found=1} END {exit !found}' /usr/local/bin/kian-install \
+    && ok "installer: fstab check validates the root entry (accepts UUID= lines)" \
+    || bad "installer: fstab check regressed to the leading-slash grep that killed every install"
+grep -qF 'cp /usr/share/kian/os-release "$MOUNT/usr/share/kian/os-release"' /usr/local/bin/kian-install \
+    && ok "installer: os-release hook source is pre-seeded (hook runs quietly in pacstrap)" \
+    || bad "installer: hook pre-seed missing (pacstrap prints 'cannot stat' again)"
+grep -q '^PRETTY_NAME="Kian OS 0.4.1' /usr/share/kian/os-release \
+    && ok "installer: bundled hook source matches the 0.4.1 identity" \
+    || bad "installer: /usr/share/kian/os-release version out of sync with the release"
+
 PERSIST_SHIPPED=0
 # The boot config lives on the ISO filesystem. /run/archiso/bootmnt is only
 # still mounted when copytoram did NOT kick in (it copies the airootfs to RAM
@@ -251,7 +264,8 @@ for o in $(cat /proc/cmdline 2>/dev/null); do
     case "$o" in archisolabel=*) ISO_LABEL="${o#archisolabel=}" ;; esac
 done
 ISO_CHECK_DIR="$(mktemp -d /tmp/kian-iso-check.XXXXXX)"
-ISO_SRC="/dev/disk/by-label/${ISO_LABEL:-KIAN_OS_040}"
+# keep the fallback in sync with profiledef.sh iso_label (KIAN_OS_041 for 0.4.1)
+ISO_SRC="/dev/disk/by-label/${ISO_LABEL:-KIAN_OS_041}"
 check_cfgs() {
     for cfg in \
         "$1/boot/syslinux/syslinux.cfg" "$1/boot/grub/grub.cfg" \
