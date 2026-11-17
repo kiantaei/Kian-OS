@@ -4,6 +4,39 @@
 version **0.4.1 "Horizon" (Linux edition)**.
 Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox).
 
+Kian OS combines an XFCE desktop and Kian branding with the standard Linux
+system underneath: pacman for packages, Bash for the shell, and systemd for
+services. You can try it from the live ISO, install it with the simple
+installer, or use the advanced archinstall-based option.
+
+> **Disk warning:** the simple installer erases its selected target disk.
+> Review the disk carefully before continuing; the installer shows a countdown
+> that you can cancel with Ctrl+C.
+
+## Quick start
+
+1. Download or [build the ISO](#build-the-iso).
+2. Boot it in VMware, QEMU, VirtualBox, or on a PC. The live desktop logs in as
+   `kian` with password `kian`.
+3. Choose **Try Kian OS**, or launch **Kian OS Installer** from the welcome
+   window to install it.
+
+See [the installation guide](#complete-installation-guide) for setup details,
+or [the repository layout](#repository-layout) to find project files.
+
+## Contents
+
+- [Identity and features](#identity-and-features)
+- [Installation guide](#complete-installation-guide)
+- [Build the ISO](#build-the-iso)
+- [Live-session persistence](#real-persistence-in-the-live-session-not-like-live)
+- [Installed system and Kian branding](#installed-system)
+- [Proton support](#run-windows-exe-programs-proton)
+- [Troubleshooting](#installer-troubleshooting)
+- [Credits and components](#credits--components)
+- [Repository layout](#repository-layout)
+- [Limitations](#honest-limitations-041)
+
 > **Migration notice (0.4.1).** Kian OS used to be a from-scratch hobby kernel
 > (Rust kernel + custom C++ desktop). Per the 0.4.1 migration it is now a real
 > Linux-based OS: real Linux kernel, real GRUB, real systemd, real pacman,
@@ -25,7 +58,10 @@ Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox).
 - Default time zone: **Asia/Tehran** (UTC+03:30; Iran abolished DST in 2022)
 - Boot menu: ASCII/wordmark "KIAN OS" splash, 5-second timeout
 
-## What is real in 0.4.1 (no fakes)
+## Identity and features
+
+Kian OS uses real Linux components underneath its branding. The desktop and
+installer run as normal Linux applications and services.
 
 | Area | Reality |
 |---|---|
@@ -367,7 +403,7 @@ runner; with neither available it prints exactly what to install.
 
 ### Installer troubleshooting
 
-The Textual-based archinstall (4.x) can crash with
+The Textual-based `kianinstall` menu can crash with
 `ScreenStackError: Can't pop screen; there must be at least one screen on the
 stack`. This is an archinstall menu bug: a key press is delivered to a menu
 screen that has already been dismissed — typically a double Enter, or a held
@@ -377,13 +413,12 @@ before anything is written to disk.
 
 What to do:
 
-- run `sudo kian-install`, which refreshes archinstall to the current
-  repository version before starting it (Arch's remedy for a misbehaving
-  installer on a live ISO),
+- use `sudo kian-install` to run Kian's separate simple installer, or retry
+  `sudo kianinstall` for the menu-driven installer,
 - press Enter **once** per menu and let the preview pane settle before the next
   key, and
-- if it still crashes, re-run `sudo kian-install`; the live session and the
-  target disk are untouched.
+- if it still crashes, restart the menu installer; the crash occurs before it
+  writes to disk.
 
 **The welcome window closes instantly when started from a root shell.**
 `kian-install-gui` needs the live desktop's `DISPLAY` and its X cookie, which a
