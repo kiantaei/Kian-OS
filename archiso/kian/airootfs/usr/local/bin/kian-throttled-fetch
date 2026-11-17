@@ -4,7 +4,7 @@
 # WHY: rate-limited mirrors (common with Iranian ISPs) reject rapid
 # back-to-back package downloads. kian-install makes downloads serial
 # (ParallelDownloads = 1) and this wrapper waits KIAN_DOWNLOAD_THROTTLE
-# seconds (default 10) after every successful download before pacman starts
+# seconds (default 2) after every successful download before pacman starts
 # the next one. EXTRACTION IS NOT THROTTLED — pacman unpacks the packages at
 # full speed; only the download phase has gaps between packages.
 #
@@ -19,7 +19,7 @@
 set -u
 OUT="$1"
 URL="$2"
-THROTTLE="${KIAN_DOWNLOAD_THROTTLE:-10}"
+THROTTLE="${KIAN_DOWNLOAD_THROTTLE:-2}"
 
 RC=1
 for attempt in 1 2 3; do
@@ -32,7 +32,7 @@ for attempt in 1 2 3; do
     sleep 3
 done
 
-if [ "$RC" -eq 0 ] && [ "${THROTTLE:-10}" -gt 0 ] 2>/dev/null; then
+if [ "$RC" -eq 0 ] && [ "${THROTTLE:-2}" -gt 0 ] 2>/dev/null; then
     # the requested gap AFTER each package download (not during install)
     sleep "$THROTTLE"
 fi

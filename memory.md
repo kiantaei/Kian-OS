@@ -57,14 +57,14 @@ archive/legacy-standalone/   pre-0.4.0 from-scratch kernel/GUI (frozen, not buil
   archinstall fork, vendored at /opt/kianinstall) stays as the advanced option.
 - Throttled downloads (user request, 2026-11-14): kian-throttled-fetch
   (XferCommand wrapper: curl -L -C - -f --retry 2, then sleep
-  KIAN_DOWNLOAD_THROTTLE seconds, default 10, 0 disables) + kian-install
+  KIAN_DOWNLOAD_THROTTLE seconds, default 2, 0 disables) + kian-install
   sets ParallelDownloads = 1 and inserts the XferCommand into the LIVE
   session's /etc/pacman.conf before pacman -Sy/pacstrap (pacstrap uses the
   HOST config+mirrorlist — that is also why regen_mirrorlist writing to
   /etc/pacman.d/mirrorlist is correct). Extraction is never throttled.
   Listed in profiledef file_permissions (755!) and verified by verify-commands
   section 8d (real robots.txt download with throttle=0). CI install test runs
-  WITH the throttle (+~10 min for ~60 packages — honest end-to-end proof).
+  WITH the throttle (honest end-to-end proof).
 - GitHub Releases hard asset cap: 2147483648 bytes (2 GiB) per file — the
   ISO hit 2.414 GB after Proton/multilib additions and the publish step
   failed with 'ReleaseAsset size must be less than 2147483648' (run

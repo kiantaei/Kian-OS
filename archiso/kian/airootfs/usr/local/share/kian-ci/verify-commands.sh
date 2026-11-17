@@ -215,13 +215,13 @@ grep -qF "&& /usr/bin/install" /etc/pacman.d/hooks/kian-os-release.hook 2>/dev/n
     && bad "branding: os-release hook Exec contains shell operators (run 43484412717 shipped plain-Arch identity because of that)" \
     || ok "branding: os-release hook Exec has no shell operators (safe for libalpm direct exec)"
 
-# 8d. Throttled downloads (rate-limited mirrors: 10 s gap after each package,
+# 8d. Throttled downloads (rate-limited mirrors: 2 s gap after each package,
 #     extraction NOT throttled — user request).
 if [ -x /usr/local/bin/kian-throttled-fetch ] && bash -n /usr/local/bin/kian-throttled-fetch 2>/dev/null; then
     ok "throttle: kian-throttled-fetch executable and syntax-clean"
-    grep -qF 'THROTTLE="${KIAN_DOWNLOAD_THROTTLE:-10}"' /usr/local/bin/kian-throttled-fetch \
-        && ok "throttle: default 10 s, configurable via KIAN_DOWNLOAD_THROTTLE (0 disables)" \
-        || bad "throttle: the 10 s default / KIAN_DOWNLOAD_THROTTLE override is missing"
+    grep -qF 'THROTTLE="${KIAN_DOWNLOAD_THROTTLE:-2}"' /usr/local/bin/kian-throttled-fetch \
+        && ok "throttle: default 2 s, configurable via KIAN_DOWNLOAD_THROTTLE (0 disables)" \
+        || bad "throttle: the 2 s default / KIAN_DOWNLOAD_THROTTLE override is missing"
     KIAN_DOWNLOAD_THROTTLE=0 /usr/local/bin/kian-throttled-fetch /tmp/kian-throttle-test https://archlinux.org/robots.txt >/dev/null 2>&1 \
         && [ -s /tmp/kian-throttle-test ] \
         && ok "throttle: real download works (curl -L -C - resume + retries)" \
@@ -231,7 +231,7 @@ if [ -x /usr/local/bin/kian-throttled-fetch ] && bash -n /usr/local/bin/kian-thr
         && ok "throttle: kian-install enables the throttled XferCommand" \
         || bad "throttle: kian-install does not enable the throttled downloader"
     grep -qF "ParallelDownloads = 1" /usr/local/bin/kian-install \
-        && ok "throttle: downloads forced serial (ParallelDownloads = 1 — the 10 s gap is real)" \
+        && ok "throttle: downloads forced serial (ParallelDownloads = 1 — the 2 s gap is real)" \
         || bad "throttle: ParallelDownloads not forced to 1 (parallel downloads would defeat the gap)"
 else
     bad "throttle: kian-throttled-fetch missing or broken"

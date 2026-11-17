@@ -257,7 +257,7 @@ steps; see [`docs/verification.md`](docs/verification.md). Quick manual pass:
    The welcome window exists only on the live ISO; an installed Kian OS
    never re-opens it.
       Package **downloads** during installation are rate-limit friendly: they
-   happen one at a time with a **10-second gap after every package**
+   happen one at a time with a **2-second gap after every package**
    (`KIAN_DOWNLOAD_THROTTLE=seconds` to change, `0` to disable) so mirrors
    that throttle rapid downloads keep working. **Installing/extracting is
    never throttled** — pacman unpacks at full speed.
