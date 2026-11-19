@@ -141,3 +141,14 @@ archive/legacy-standalone/   pre-0.4.0 from-scratch kernel/GUI (frozen, not buil
 - No fake icons (emoji), no fake commands, no simulated outputs.
 - Legacy code is archived, not deleted; the two architectures must not be
   mixed in the build.
+
+- Icons bug (user report 2026-11-19, "icons + start menu disappear after
+  install"): the 8 kian-* icons shipped only as SVG and librsvg +
+  hicolor-icon-theme were NOT installed -> GTK silently fell back to
+  generic glyphs (whisker = hamburger, launchers = gear/blank). Fixed in
+  12aa756: PNG rasters 48/64/128 + pixmaps for all 8 names
+  (scripts/gen_kian_icons.py), librsvg + hicolor-icon-theme in
+  packages.x86_64, kian-install pre-copies /etc/skel into the target
+  BEFORE useradd (the chroot built /home/kian from the stock skel), verify
+  section 8f (12 checks). LESSON: never grep icon NAMES inside binary/SVG
+  files to test presence; check the FILES and the rasterizer.
