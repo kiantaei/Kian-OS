@@ -1,7 +1,7 @@
 # Kian OS
 
 **Kian OS** is a **Linux-based desktop operating system** (Arch Linux base),
-version **0.4.1 "Horizon" (Linux edition)**.
+version **0.4.2 "Horizon" (Linux edition)**.
 Primary target: **VMware Workstation/Player/Fusion** (also QEMU and VirtualBox).
 
 Kian OS combines an XFCE desktop and Kian branding with the standard Linux
@@ -35,10 +35,10 @@ or [the repository layout](#repository-layout) to find project files.
 - [Troubleshooting](#installer-troubleshooting)
 - [Credits and components](#credits--components)
 - [Repository layout](#repository-layout)
-- [Limitations](#honest-limitations-041)
+- [Limitations](#honest-limitations-042)
 
-> **Migration notice (0.4.1).** Kian OS used to be a from-scratch hobby kernel
-> (Rust kernel + custom C++ desktop). Per the 0.4.1 migration it is now a real
+> **Migration notice (0.4.2).** Kian OS used to be a from-scratch hobby kernel
+> (Rust kernel + custom C++ desktop). Per the 0.4.2 migration it is now a real
 > Linux-based OS: real Linux kernel, real GRUB, real systemd, real pacman,
 > real Bash and real applications — with the original Kian OS branding and
 > desktop design preserved on top. The old standalone kernel code is archived
@@ -81,7 +81,7 @@ installer run as normal Linux applications and services.
 
 ## Boot menu (GRUB/syslinux)
 
-- **Kian OS 0.4.1 (Horizon)** — default entry, 1 s timeout (arrow keys keep the menu open)
+- **Kian OS 0.4.2 (Horizon)** — default entry, 1 s timeout (arrow keys keep the menu open)
 - Kian OS with hardware clock in UTC
 - UEFI Firmware Settings / Boot existing OS / Reboot / Power off
 
@@ -92,7 +92,7 @@ image is step 0 — see [Build the ISO](#build-the-iso).
 
 ### 0. What you need
 
-- `kian-os-0.4.1-x86_64.iso` (built locally or taken from a release) and its
+- `kian-os-0.4.2-x86_64.iso` (built locally or taken from a release) and its
   `.sha256` file.
 - **2 GB RAM minimum, 4 GB recommended** (Chromium + the installer).
 - **20 GB** of free disk space for the installation.
@@ -115,16 +115,16 @@ image is step 0 — see [Build the ISO](#build-the-iso).
 ```bash
 qemu-system-x86_64 -enable-kvm -m 4096 -smp 2 \
   -drive file=kian-os.qcow2,if=virtio,format=qcow2 \
-  -cdrom kian-os-0.4.1-x86_64.iso -boot d
+  -cdrom kian-os-0.4.2-x86_64.iso -boot d
 ```
 
 **Real PC**
 
-Write the ISO to a USB stick (`sudo dd if=kian-os-0.4.1-x86_64.iso of=/dev/sdX
+Write the ISO to a USB stick (`sudo dd if=kian-os-0.4.2-x86_64.iso of=/dev/sdX
 bs=4M status=progress oflag=sync` — check `/dev/sdX` with `lsblk`), boot from it,
 and disable Secure Boot if the firmware refuses the unsigned bootloader.
 
-Pick **Kian OS 0.4.1 (Horizon)** in the GRUB (UEFI) or syslinux (BIOS) menu.
+Pick **Kian OS 0.4.2 (Horizon)** in the GRUB (UEFI) or syslinux (BIOS) menu.
 
 ### 2. The live desktop
 
@@ -205,7 +205,7 @@ which offers to install the full Kian desktop into that system.
 | Installer window closes instantly | Start it from the desktop menu (**Kian OS Installer**) instead of a root shell |
 | No internet in the live session | Check the VM network is NAT/bridged; `nmcli device status`, `ping -c1 archlinux.org` |
 | Installation stops at `pacstrap` | No network, or a mirror region that is unreachable — re-run `sudo kian-install` and pick another region |
-| `mkfs.ext4: The file /dev/sda1 does not exist and no size was specified` | Fixed in 0.4.1 builds after the partitioning fix (`wipefs` ran after `parted` and deleted the new table). On an older ISO use `sudo kianinstall` instead, or re-build the ISO |
+| `mkfs.ext4: The file /dev/sda1 does not exist and no size was specified` | Fixed in 0.4.2 builds after the partitioning fix (`wipefs` ran after `parted` and deleted the new table). On an older ISO use `sudo kianinstall` instead, or re-build the ISO |
 | Installed system lands on a text login | Log in and run `sudo systemctl enable --now lightdm`, then `startxfce4` |
 | Wrong system booted after install | Reboot and pick *Kian OS* in GRUB; check the boot order in the firmware/VM settings |
 
@@ -218,7 +218,7 @@ profile derived from the official `releng` profile:
 # on an Arch Linux host (or in the archlinux:base-devel container)
 sudo pacman -S archiso grub syslinux mtools dosfstools
 ./build.sh                  # or: make iso
-# result: build/out/kian-os-0.4.1-x86_64.iso (+ .sha256)
+# result: build/out/kian-os-0.4.2-x86_64.iso (+ .sha256)
 ./build.sh --check          # syntax sanity checks only
 ```
 
@@ -262,7 +262,7 @@ serial transcript are uploaded as CI artifacts.
 The 11-point checklist from the migration requirements maps to CI + manual
 steps; see [`docs/verification.md`](docs/verification.md). Quick manual pass:
 
-1. Attach `kian-os-0.4.1-x86_64.iso` to a VM (BIOS or UEFI firmware both work)
+1. Attach `kian-os-0.4.2-x86_64.iso` to a VM (BIOS or UEFI firmware both work)
    and boot it — GRUB (UEFI) or the syslinux menu (BIOS) appears.
 2. The live session auto-logs-in as `kian` into the Kian-branded XFCE desktop
    (log out to see the LightDM greeter).
@@ -313,7 +313,7 @@ in RAM. Kian OS can make the live session **really save**:
    `sudo kian-persist` — it auto-picks an empty disk (or pass one:
    `sudo kian-persist /dev/sdX`), warns loudly for 8 seconds, then creates an
    ext4 partition labelled `KIANPERSIST`.
-2. Reboot and choose **"Kian OS 0.4.1 — persistent session"** in the boot
+2. Reboot and choose **"Kian OS 0.4.2 — persistent session"** in the boot
    menu (present for both BIOS/syslinux and UEFI/GRUB; the plain entry stays
    non-persistent so the ISO always boots everywhere).
 3. In that session every file you create in `/home/kian`, every `/etc`
@@ -517,17 +517,17 @@ Kian-OS/
 │                                 # SVG icons, start page, os-release
 ├── scripts/ci-boot-test.sh       # real QEMU boot test (CI)
 ├── build.sh / Makefile           # local build entry points
-├── kian-os.vmx                   # VMware VM config (points at the 0.4.1 ISO)
+├── kian-os.vmx                   # VMware VM config (points at the 0.4.2 ISO)
 ├── docs/verification.md          # 11-point checklist + evidence mapping
 ├── ROADMAP.md                    # Linux-era roadmap
-└── archive/legacy-standalone/    # the pre-0.4.1 from-scratch kernel (frozen)
+└── archive/legacy-standalone/    # the pre-0.4.2 from-scratch kernel (frozen)
 ```
 
-## Honest limitations (0.4.1)
+## Honest limitations (0.4.2)
 
 - The **live session is volatile** (standard live-media behavior): files in
   `/home/kian` are lost on reboot unless you install Kian OS to disk.
-- **Paint was not migrated** — there is no replacement in 0.4.1 yet.
+- **Paint was not migrated** — there is no replacement in 0.4.2 yet.
 - The legacy C++ desktop (code-drawn icons, mini-python, RAM filesystem) is
   archived; only its **design and branding** live on.
 - Xenox is a Chromium profile, not a custom engine — the custom UI remains a

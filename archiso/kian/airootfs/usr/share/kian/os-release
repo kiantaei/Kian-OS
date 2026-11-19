@@ -1,8 +1,8 @@
 NAME="Kian OS"
-VERSION="0.4.1 (Horizon)"
-VERSION_ID=0.4.1
+VERSION="0.4.2 (Horizon)"
+VERSION_ID=0.4.2
 VERSION_CODENAME=horizon
-PRETTY_NAME="Kian OS 0.4.1 (Horizon)"
+PRETTY_NAME="Kian OS 0.4.2 (Horizon)"
 ID=kian
 ID_LIKE=arch
 ANSI_COLOR="1;34"

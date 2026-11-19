@@ -132,7 +132,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kian-os-0.4.1-build
+          name: kian-os-0.4.2-build
           path: |
             build/out/*.iso
             build/out/*.sha256
@@ -162,12 +162,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "Kian OS 0.4.1 rolling build"
+          name: "Kian OS 0.4.2 rolling build"
           prerelease: true
           overwrite_files: true
           fail_on_unmatched_files: true
           body: |
-            Automated rolling build of Kian OS 0.4.1 "Horizon" (Linux-based).
+            Automated rolling build of Kian OS 0.4.2 "Horizon" (Linux-based).
 
             - commit: ${{ github.sha }}
             - built with archiso in an archlinux:base-devel container

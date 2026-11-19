@@ -430,6 +430,13 @@ say "/etc/fstab written: $(grep -vc '^#' "$MOUNT/etc/fstab") entry line(s), root
 # ---------------------------------------------------------------------------
 # Configure the installed system (timezone, locale, user, bootloader)
 # ---------------------------------------------------------------------------
+# /etc/skel must reach the TARGET before useradd below: the chroot builds
+# /home/kian from the target's /etc/skel, which is still the stock `filesystem`
+# one at that point (kian-apply runs later). Without this copy the first boot
+# has no Kian panel config / Desktop launchers, and the whisker start-menu
+# button plus the launchers fall back to generic icons.
+mkdir -p "$MOUNT/etc/skel"
+cp -a /etc/skel/. "$MOUNT/etc/skel/" || warn "could not copy /etc/skel into the target — kian-apply will retry after the chroot"
 mkdir -p "$MOUNT/etc/sudoers.d"
 cp /etc/sudoers.d/kian-wheel "$MOUNT/etc/sudoers.d/kian-wheel" && chmod 440 "$MOUNT/etc/sudoers.d/kian-wheel"
 cp /etc/pacman.d/mirrorlist "$MOUNT/etc/pacman.d/mirrorlist" 2>/dev/null || true

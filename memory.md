@@ -55,6 +55,17 @@ archive/legacy-standalone/   pre-0.4.0 from-scratch kernel/GUI (frozen, not buil
   (`GRUB_DISTRIBUTOR="Kian OS"`), then `kian-apply -y /mnt`. Needs
   `arch-install-scripts` + `parted` (in packages.x86_64). `kianinstall` (the
   archinstall fork, vendored at /opt/kianinstall) stays as the advanced option.
+- Stale-ISO lesson (user screenshot 2026-11-14): the release kept the SAME
+  filename kian-os-0.4.0-x86_64.iso across broken and fixed builds, so the
+  user kept booting the broken one ("fstab came out empty" + hook 'cannot
+  stat' — both already fixed in 82bfcac; CI log proved the current code
+  quiet+correct). Fix: 0.4.1 bump EVERYWHERE release-bearing (profiledef
+  iso_version+iso_label, os-release, verify pin, README, build.sh,
+  docs/verification.md) + workflow de-hardcoded (checksums/boot/install
+  steps now glob kian-os-*.iso) + NEW cleanup step deletes previous
+  kian-os-*.iso assets from 'latest' before upload. RULE: any version bump
+  must grep kian-os-<old> / KIAN_OS_<old> across the whole repo AND bump
+  iso_label; verify section 8e tripwires the 82bfcac fixes.
 - Throttled downloads (user request, 2026-11-14): kian-throttled-fetch
   (XferCommand wrapper: curl -L -C - -f --retry 2, then sleep
   KIAN_DOWNLOAD_THROTTLE seconds, default 2, 0 disables) + kian-install

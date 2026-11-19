@@ -67,6 +67,14 @@ materia-gtk-theme
 # GUI dialogs for the auto-opening installer welcome window (kian-install-gui)
 yad
 papirus-icon-theme
+# The 8 kian-* icons ship as SVG (hicolor/scalable) AND as PNG rasters
+# (48/64/128 + pixmaps). librsvg is what gdk-pixbuf needs to rasterize the
+# SVGs at runtime; hicolor-icon-theme provides the theme index. Without
+# librsvg GTK silently falls back to generic glyphs: the whisker start-menu
+# button became the default hamburger and launchers looked broken
+# (reported as "icons and the start menu disappear after install").
+librsvg
+hicolor-icon-theme
 ttf-liberation
 ttf-dejavu
 noto-fonts

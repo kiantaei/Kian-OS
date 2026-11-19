@@ -17,7 +17,7 @@ echo "===== Kian OS verification suite ====="
 
 # 1. Identity: this really is Kian OS on a real Linux kernel
 grep -q '^NAME="Kian OS"' /etc/os-release && ok "identity: /etc/os-release is Kian OS" || bad "identity: os-release"
-grep -q '^PRETTY_NAME="Kian OS 0.4.1' /etc/os-release && ok "identity: version 0.4.1" || bad "identity: version"
+grep -q '^PRETTY_NAME="Kian OS 0.4.2' /etc/os-release && ok "identity: version 0.4.2" || bad "identity: version"
 [[ "$(id -u)" == 1000 ]] && ok "user: running as uid 1000 (kian), not root" || bad "user: unexpected uid $(id -u)"
 id -nG kian 2>/dev/null | grep -qw wheel && ok "sudo: kian is in wheel" || bad "sudo: kian not in wheel"
 [[ "$(id -u root)" == 0 ]] && ! sudo -l -U root true >/dev/null 2>&1 && true
@@ -246,9 +246,37 @@ grep -qF '{found=1} END {exit !found}' /usr/local/bin/kian-install \
 grep -qF 'cp /usr/share/kian/os-release "$MOUNT/usr/share/kian/os-release"' /usr/local/bin/kian-install \
     && ok "installer: os-release hook source is pre-seeded (hook runs quietly in pacstrap)" \
     || bad "installer: hook pre-seed missing (pacstrap prints 'cannot stat' again)"
-grep -q '^PRETTY_NAME="Kian OS 0.4.1' /usr/share/kian/os-release \
-    && ok "installer: bundled hook source matches the 0.4.1 identity" \
+grep -q '^PRETTY_NAME="Kian OS 0.4.2' /usr/share/kian/os-release \
+    && ok "installer: bundled hook source matches the 0.4.2 identity" \
     || bad "installer: /usr/share/kian/os-release version out of sync with the release"
+
+# 8f. Launcher/menu icons — the skel names 8 kian-* icons (whisker
+#     button-icon=kian-os-logo, Desktop Icon=kian-files/terminal/xenox).
+#     They ship as SVG (scalable) AND PNG rasters; GTK needs librsvg to
+#     rasterize SVGs. When neither path resolves, XFCE falls back to generic
+#     glyphs — the start-menu button becomes the default hamburger and
+#     launchers look broken (user report: "icons and the start menu
+#     disappear after install").
+ICON_NAMES="kian-os-logo kian-files kian-terminal kian-xenox kian-calculator kian-notepad kian-settings kian-taskmgr"
+ICON_MISSING=0
+for n in ${ICON_NAMES}; do
+    if [ -s "/usr/share/pixmaps/${n}.png" ] && find /usr/share/icons/hicolor -name "${n}.png" | grep -q .; then
+        ok "icons: ${n} ships as PNG (hicolor + pixmaps)"
+    else
+        bad "icons: ${n} missing — the start-menu button / launchers lose their icon"
+        ICON_MISSING=1
+    fi
+done
+find /usr/lib/gdk-pixbuf-2.0 -name 'librsvg*' 2>/dev/null | grep -q . \
+    && ok "icons: librsvg present — the scalable kian-* SVGs can rasterize" \
+    || { bad "icons: librsvg missing — SVG icons silently fall back to generic glyphs"; ICON_MISSING=1; }
+[ -f /usr/share/icons/hicolor/index.theme ] \
+    && ok "icons: hicolor-icon-theme present (theme index)" \
+    || { bad "icons: hicolor index.theme missing"; ICON_MISSING=1; }
+grep -qF 'cp -a /etc/skel/. "$MOUNT/etc/skel/"' /usr/local/bin/kian-install \
+    && ok "installer: Kian skel copied into the target BEFORE useradd" \
+    || bad "installer: skel not pre-copied — installed system boots with a stock panel"
+[ "${ICON_MISSING}" -eq 0 ] && ok "icons: every referenced kian-* icon resolves" || true
 
 PERSIST_SHIPPED=0
 # The boot config lives on the ISO filesystem. /run/archiso/bootmnt is only
@@ -264,8 +292,8 @@ for o in $(cat /proc/cmdline 2>/dev/null); do
     case "$o" in archisolabel=*) ISO_LABEL="${o#archisolabel=}" ;; esac
 done
 ISO_CHECK_DIR="$(mktemp -d /tmp/kian-iso-check.XXXXXX)"
-# keep the fallback in sync with profiledef.sh iso_label (KIAN_OS_041 for 0.4.1)
-ISO_SRC="/dev/disk/by-label/${ISO_LABEL:-KIAN_OS_041}"
+# keep the fallback in sync with profiledef.sh iso_label (KIAN_OS_042 for 0.4.2)
+ISO_SRC="/dev/disk/by-label/${ISO_LABEL:-KIAN_OS_042}"
 check_cfgs() {
     for cfg in \
         "$1/boot/syslinux/syslinux.cfg" "$1/boot/grub/grub.cfg" \
