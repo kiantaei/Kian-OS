@@ -150,11 +150,26 @@ jobs:
           # kian-os-0.4.0 asset would sit next to the new one and users kept
           # booting the stale build (its installer died with "fstab came out
           # empty" — fixed in 82bfcac, but the filename looked identical).
-          ASSETS=$(gh api "repos/${{ github.repository }}/releases/tags/latest" \
-            --jq '.assets[] | select(.name | test("kian-os-.*\\.(iso|sha256)$")) | .name' 2>/dev/null || true)
+          # The previous jq pipeline died silently behind `2>/dev/null || true`
+          # and 0.4.0/0.4.1 stayed in the release next to 0.4.2 — fetch the
+          # release LOUDLY, fail on real errors, and tolerate a missing
+          # rolling release (first run).
+          if ! gh api "repos/${{ github.repository }}/releases/tags/latest" > /tmp/release.json 2>/tmp/release.err; then
+            if grep -q "HTTP 404" /tmp/release.err; then
+              echo "no rolling release yet — nothing to clean"
+              exit 0
+            fi
+            cat /tmp/release.err >&2
+            exit 1
+          fi
+          ASSETS=$(python3 -c "import json;print('\n'.join(a['name'] for a in json.load(open('/tmp/release.json'))['assets'] if a['name'].endswith(('.iso','.sha256'))))")
+          if [ -z "$ASSETS" ]; then
+            echo "no previous ISO assets to remove"
+            exit 0
+          fi
           for a in $ASSETS; do
             echo "removing stale asset: $a"
-            gh release delete-asset latest "$a" --yes || true
+            gh release delete-asset latest "$a" --yes
           done
 
       - name: Publish rolling release (main)

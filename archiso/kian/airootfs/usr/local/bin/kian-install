@@ -389,7 +389,11 @@ if ! pacman -Sy --noconfirm >/tmp/kian-pacman-sync.log 2>&1; then
     tail -5 /tmp/kian-pacman-sync.log >&2 || true
     die "could not sync the package databases — the mirrors are unreachable. Check the network (VMware/QEMU NAT is automatic), rerun and pick another region, or use: sudo kianinstall"
 fi
-ping -c1 -W5 archlinux.org >/dev/null 2>&1 || die "no network — the installer downloads packages from the mirrors you chose. Connect (VMware/QEMU NAT is automatic) and run: sudo kian-install"
+# NOTE: no ICMP "ping" check here on purpose. pacman -Sy above is the
+# authoritative reachability test (TCP to the real mirrors). An ICMP probe
+# gives false negatives where ping is blocked but HTTP works — QEMU user-mode
+# NAT without ICMP emulation (it made the CI install test abort with
+# "no network" twice) and many real ISPs, Iranian ones included.
 
 PKGS=(
     base base-devel linux linux-firmware intel-ucode amd-ucode mkinitcpio

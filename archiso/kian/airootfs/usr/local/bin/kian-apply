@@ -185,7 +185,11 @@ install_desktop() {   # $1 = target root
         warn "target has no /etc/pacman.conf — cannot install the desktop; install Xfce manually";
         return 1;
     }
-    if ! ping -c1 -W3 archlinux.org >/dev/null 2>&1; then
+    # TCP reachability probe, not ICMP: ping is blocked on QEMU user-mode NAT
+    # (CI) and plenty of real networks, while HTTP works fine. curl is part of
+    # the live session (pacstrap's own transport).
+    if ! curl -fsI --max-time 8 https://archlinux.org >/dev/null 2>&1 \
+       && ! curl -fsI --max-time 8 http://mirrors.kernel.org >/dev/null 2>&1; then
         warn "no network — cannot install the desktop now. Connect and re-run: sudo kian-apply $t"
         return 1
     fi
@@ -354,6 +358,17 @@ apply_branding() {
         gid="$(awk -F: -v u="$user" '$1==u{print $4}' "$t/etc/passwd" 2>/dev/null)"
         [ -n "${uid:-}" ] || continue
         cp -a -n "$t/etc/skel/." "$home/" 2>/dev/null || true
+        # Super key -> Start menu: a home created before this binding shipped,
+        # or whose xfconf file an earlier login already wrote, keeps its old
+        # keyboard-shortcuts.xml (cp -a -n never overwrites). Merge the Super
+        # bindings into the commands/custom section, idempotently. The
+        # commands section comes first in the file, so the FIRST "custom"
+        # property is the right insertion point.
+        ks="$home/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml"
+        if [ -f "$ks" ] && ! grep -q 'name="Super_L"' "$ks"; then
+            sed -i '0,/<property name="custom" type="empty">/s||&\n      <property name="Super_L" type="string" value="xfce4-popup-whiskermenu"/>\n      <property name="Super_R" type="string" value="xfce4-popup-whiskermenu"/>|' "$ks" \
+                || warn "could not add the Super key binding for $user"
+        fi
         chmod 755 "$home"/Desktop/*.desktop 2>/dev/null || true
         chown -R "$uid:$gid" "$home" 2>/dev/null || warn "could not chown $home to $user"
         say "seeded Kian defaults for user $user"
