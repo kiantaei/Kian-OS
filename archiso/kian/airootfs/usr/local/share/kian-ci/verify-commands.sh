@@ -267,7 +267,9 @@ for n in ${ICON_NAMES}; do
         ICON_MISSING=1
     fi
 done
-find /usr/lib/gdk-pixbuf-2.0 -name 'librsvg*' 2>/dev/null | grep -q . \
+# Arch names the gdk-pixbuf loader libpixbufloader_svg.so — a 'librsvg*'
+# glob matched nothing and produced a false FAIL on the 0.4.2 boot test.
+find /usr/lib/gdk-pixbuf-2.0 \( -iname 'librsvg*' -o -iname 'libpixbufloader_svg*' \) 2>/dev/null | grep -q . \
     && ok "icons: librsvg present — the scalable kian-* SVGs can rasterize" \
     || { bad "icons: librsvg missing — SVG icons silently fall back to generic glyphs"; ICON_MISSING=1; }
 [ -f /usr/share/icons/hicolor/index.theme ] \
@@ -277,6 +279,27 @@ grep -qF 'cp -a /etc/skel/. "$MOUNT/etc/skel/"' /usr/local/bin/kian-install \
     && ok "installer: Kian skel copied into the target BEFORE useradd" \
     || bad "installer: skel not pre-copied — installed system boots with a stock panel"
 [ "${ICON_MISSING}" -eq 0 ] && ok "icons: every referenced kian-* icon resolves" || true
+
+# 8g. Super key -> Start menu (whisker) binding. The binding lives in the
+#     skel (both Windows keys) and kian-apply merges it into EXISTING homes
+#     whose xfconf file an earlier login already wrote (no-clobber copy
+#     never overwrites those).
+SKS="/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml"
+grep -q 'name="Super_L"' "$SKS" \
+    && ok "shortcuts: skel binds the LEFT Super key to the Start menu" \
+    || bad "shortcuts: Super_L binding missing from the skel"
+grep -q 'name="Super_R"' "$SKS" \
+    && ok "shortcuts: skel binds the RIGHT Super key to the Start menu" \
+    || bad "shortcuts: Super_R binding missing from the skel"
+grep -q 'xfce4-popup-whiskermenu' "$SKS" \
+    && ok "shortcuts: binding points at xfce4-popup-whiskermenu" \
+    || bad "shortcuts: binding does not call xfce4-popup-whiskermenu"
+command -v xfce4-popup-whiskermenu >/dev/null 2>&1 \
+    && ok "shortcuts: xfce4-popup-whiskermenu is installed" \
+    || bad "shortcuts: xfce4-popup-whiskermenu missing — the Super key binding cannot fire"
+grep -q 'Super_L' /usr/local/bin/kian-apply \
+    && ok "shortcuts: kian-apply merges the Super bindings into existing homes" \
+    || bad "shortcuts: kian-apply cannot fix existing homes (binding only lands on fresh installs)"
 
 PERSIST_SHIPPED=0
 # The boot config lives on the ISO filesystem. /run/archiso/bootmnt is only
