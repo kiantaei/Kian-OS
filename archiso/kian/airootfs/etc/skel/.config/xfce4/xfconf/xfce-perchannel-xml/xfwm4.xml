@@ -6,11 +6,19 @@
   <property name="theme" type="string" value="Materia-dark-compact"/>
   <property name="workspace_count" type="int" value="2"/>
   <property name="wrap_workspaces" type="bool" value="true"/>
-  <property name="show_dock_shadow" type="bool" value="false"/>
   <property name="titleless_maximized_windows" type="bool" value="false"/>
-  <!-- Compositing OFF by default: in VMware/QEMU without 3D acceleration the
-       GLX-based compositor is the most common cause of black or garbled
-       windows. xfwm4 runs fine without it and the desktop looks identical on
-       the flat Materia theme. -->
-  <property name="use_compositing" type="bool" value="false"/>
+  <!-- Compositing ON for a smoother desktop (soft shadows, tear-free
+       window moves, window switcher overlay). xfwm4's compositor is the
+       built-in software one (XRender), not the old GLX path, so it works
+       in VMware/QEMU without 3D acceleration. Shadows are kept subtle and
+       disabled on docks/panels so the flat Materia look is preserved. -->
+  <property name="use_compositing" type="bool" value="true"/>
+  <property name="show_dock_shadow" type="bool" value="false"/>
+  <property name="show_frame_shadow" type="bool" value="true"/>
+  <property name="show_popup_shadow" type="bool" value="true"/>
+  <property name="shadow_opacity" type="int" value="40"/>
+  <property name="popup_opacity" type="int" value="95"/>
+  <property name="frame_opacity" type="int" value="90"/>
+  <property name="box_resize" type="bool" value="true"/>
+  <property name="zoom_desktop" type="bool" value="false"/>
 </channel>
