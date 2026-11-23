@@ -18,4 +18,13 @@
     <property name="ButtonImages" type="bool" value="true"/>
     <property name="MenuBarDetachable" type="bool" value="false"/>
   </property>
+  <!-- Smooth text: antialiasing with slight hinting and subpixel RGB on
+       LCDs; in VMs the fallback rendering stays antialiased too. -->
+  <property name="Xft" type="empty">
+    <property name="Antialias" type="int" value="1"/>
+    <property name="Hinting" type="int" value="1"/>
+    <property name="HintStyle" type="string" value="hintslight"/>
+    <property name="RGBA" type="string" value="rgb"/>
+    <property name="DPI" type="double" value="96"/>
+  </property>
 </channel>
